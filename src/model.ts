@@ -1,6 +1,9 @@
 export const STATUSES = ['cataloged', 'specified', 'in-dev', 'implemented', 'verified', 'stale', 'deprecated'] as const;
 export type Status = (typeof STATUSES)[number];
 
+/** 승인된 스펙이 있는 상태 */
+export const SPEC_DONE: readonly Status[] = ['specified', 'in-dev', 'implemented', 'verified'];
+
 export const NODES = ['spec', 'dev', 'verify', 'audit'] as const;
 export type Node = (typeof NODES)[number];
 export type Actor = Node | 'sync' | 'human';
@@ -27,6 +30,7 @@ export type HistoryEntry = Readonly<{
   actor: Actor;
   at: string;
   message: string;
+  note?: string;
 }>;
 
 export type RequirementState = Readonly<{

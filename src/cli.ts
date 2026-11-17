@@ -2,6 +2,8 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { loadCatalog } from './catalog.ts';
+import { escalate, flagsOf } from './flags.ts';
+import type { Flags } from './flags.ts';
 import { pickNext } from './select.ts';
 import { loadConfig, loadStates, paths, saveState } from './store.ts';
 import { sync } from './sync.ts';
@@ -11,7 +13,7 @@ import type { Hold, RequirementDoc, RequirementState } from './model.ts';
 class UsageError extends Error {}
 
 const USAGE = `사용법: agdd <명령>
-  status                     요구사항별 상태와 대기 사유
+  status [--json]            요구사항별 상태, 세부 단계, 대기 사유
   sync                       요구사항 파일 변경만 반영
   next <spec|dev|verify>     노드가 다음에 고를 후보 (실행하지 않음)
   answer <ID> <답> [Q번호]   열린 질문에 답한다
@@ -29,17 +31,43 @@ const table = (rows: string[][]) => {
   return rows.map(r => r.map((c, i) => c.padEnd(widths[i])).join('  ').trimEnd()).join('\n');
 };
 
-const status = ({ docs, states }: Ctx) => {
-  const docById = new Map(docs.map(d => [d.id, d]));
-  const rows = states.map(s => [
-    s.id,
-    docById.get(s.id)?.priority ?? '-',
-    s.status,
-    s.holds.map(holdLabel).join(' / ') || (s.bug ? `버그: ${s.bug.evidence.split('\n')[0]}` : ''),
-    docById.get(s.id)?.title ?? '',
-  ]);
-  return table([['ID', '우선순위', '상태', '대기 사유', '제목'], ...rows]);
+const phaseLabel = (f: Flags) => {
+  const facts = [
+    f.blockedBy.join(', '),
+    f.rejections > 0 && `반려 ${f.rejections}`,
+    f.reworks > 0 && `재작업 ${f.reworks}`,
+    f.sameFailureStreak > 1 && `같은 실패 ${f.sameFailureStreak}`,
+    f.staleReason,
+  ].filter(Boolean);
+  return facts.length ? `${f.phase}(${facts.join(' · ')})` : f.phase;
 };
+
+const report = ({ docs, states }: Ctx) => {
+  const docById = new Map(docs.map(d => [d.id, d]));
+  return states.map(s => ({ state: s, doc: docById.get(s.id), flags: flagsOf(s, docById.get(s.id), states) }));
+};
+
+const status = (ctx: Ctx) => {
+  const rows = report(ctx).map(({ state: s, doc, flags }) => [
+    s.id,
+    doc?.priority ?? '-',
+    s.status,
+    phaseLabel(flags),
+    s.holds.map(holdLabel).join(' / ') || (s.bug ? `버그: ${s.bug.evidence.split('\n')[0]}` : ''),
+    doc?.title ?? '',
+  ]);
+  return table([['ID', '우선순위', '상태', '단계', '대기 사유', '제목'], ...rows]);
+};
+
+const statusJson = (ctx: Ctx) =>
+  JSON.stringify(
+    report(ctx).map(({ state: s, doc, flags }) => ({
+      id: s.id, title: doc?.title ?? null, priority: doc?.priority ?? null,
+      status: s.status, flags, holds: s.holds, bug: s.bug,
+    })),
+    null,
+    2,
+  );
 
 const find = (ctx: Ctx, id: string | undefined) => {
   const s = ctx.states.find(x => x.id === id);
@@ -79,17 +107,23 @@ const main = (argv: string[]) => {
   }
 
   // 모든 명령 전에 sync: 사람이 쓴 요구사항 파일이 항상 먼저 반영된다.
+  const config = loadConfig(root);
   const synced = sync(catalog.docs, loadStates(root), at);
-  synced.changes.forEach(c => saveState(root, synced.states.find(s => s.id === c.id)!));
-  synced.changes.forEach(c => console.log(`sync: ${c.id} ${c.transition}`));
-  const ctx: Ctx = { root, docs: catalog.docs, states: synced.states, at };
+  // 같은 일을 되풀이하는 요구사항은 노드가 더 시도하기 전에 사람에게 넘긴다.
+  const escalated = escalate(synced.states, config.limits, at);
+  const changed = new Set([...synced.changes, ...escalated.changes].map(c => c.id));
+  escalated.states.filter(s => changed.has(s.id)).forEach(s => saveState(root, s));
+  const log = args.includes('--json') ? console.error : console.log;
+  synced.changes.forEach(c => log(`sync: ${c.id} ${c.transition}`));
+  escalated.changes.forEach(c => log(`escalate: ${c.id} 반복 한도 → 질문 대기`));
+  const ctx: Ctx = { root, docs: catalog.docs, states: escalated.states, at };
 
-  if (command === 'status') return console.log(status(ctx));
+  if (command === 'status') return console.log(args.includes('--json') ? statusJson(ctx) : status(ctx));
   if (command === 'sync') return synced.changes.length || console.log('sync: 변경 없음');
   if (command === 'next') {
     const node = args[0];
     if (node !== 'spec' && node !== 'dev' && node !== 'verify') throw new UsageError(USAGE);
-    const pick = pickNext(node, ctx.docs, ctx.states, loadConfig(root));
+    const pick = pickNext(node, ctx.docs, ctx.states, config);
     return console.log(pick.id ? `${node} → ${pick.id}` : pick.reason);
   }
   const human = humanCommands[command];

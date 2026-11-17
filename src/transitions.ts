@@ -1,4 +1,4 @@
-import { NODES } from './model.ts';
+import { NODES, SPEC_DONE } from './model.ts';
 import type { Actor, Hold, HoldKind, RequirementState, Status } from './model.ts';
 
 /** docs/graph.md의 "전이 규칙" 표를 그대로 옮긴 것 */
@@ -32,11 +32,13 @@ type Rule<I> = Readonly<{
   guard?: (ctx: Ctx<I>) => string | null;
   effect?: (ctx: Ctx<I>) => Partial<RequirementState>;
   message?: (ctx: Ctx<I>) => string;
+  /** 이력에 남길 근거. 플래그 계산(src/flags.ts)이 읽는다. */
+  note?: (ctx: Ctx<I>) => string;
 }>;
 
 const ALIVE: readonly Status[] = ['cataloged', 'specified', 'in-dev', 'implemented', 'verified', 'stale'];
 const PRE_SPEC: readonly Status[] = ['cataloged', 'stale'];
-const POST_SPEC: readonly Status[] = ['specified', 'in-dev', 'implemented', 'verified'];
+const POST_SPEC = SPEC_DONE;
 
 const holdsOf = (s: RequirementState, kind: HoldKind) => s.holds.filter(h => h.kind === kind);
 const without = (s: RequirementState, kind: HoldKind) => s.holds.filter(h => h.kind !== kind);
@@ -140,6 +142,7 @@ const RULES: { [N in TransitionName]: Rule<Inputs[N]> } = {
     from: ['implemented'], to: 'in-dev', actors: ['verify'],
     effect: ({ input, at }) => ({ bug: { evidence: input.evidence, at } }),
     message: () => 'E2E 실패 → 버그 기록',
+    note: ({ input }) => input.evidence,
   },
   respec: {
     from: POST_SPEC, to: 'stale', actors: ['human'],
@@ -176,7 +179,11 @@ export const apply = <N extends TransitionName>(
     status: to,
     history: [
       ...state.history,
-      { from: state.status, to, transition: name, actor, at, message: rule.message?.(ctx) ?? name },
+      {
+        from: state.status, to, transition: name, actor, at,
+        message: rule.message?.(ctx) ?? name,
+        ...(rule.note ? { note: rule.note(ctx) } : {}),
+      },
     ],
   };
 };

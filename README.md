@@ -23,13 +23,14 @@ node src/cli.ts status
 | `src/transitions.ts` | 전이 규칙 (순수 함수) |
 | `src/sync.ts` | 요구사항 파일 변경 감지 |
 | `src/select.ts` | 노드별 후보 선택과 WIP 한도 |
+| `src/flags.ts` | 세부 단계와 반복 횟수 계산, 반복 한도 |
 | `src/cli.ts` | 명령 |
 | `legacy-mvp/` | 첫 번째 단일 파일 예제 (참고용) |
 
 ## 명령
 
 ```
-agdd status                     요구사항별 상태와 대기 사유
+agdd status [--json]            요구사항별 상태, 세부 단계, 대기 사유
 agdd sync                       요구사항 파일 변경만 반영
 agdd next <spec|dev|verify>     노드가 다음에 고를 후보 (실행하지 않음)
 agdd answer <ID> <답> [Q번호]   열린 질문에 답한다

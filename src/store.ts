@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { Limits } from './flags.ts';
 import type { Config } from './select.ts';
 import type { RequirementState } from './model.ts';
 
@@ -10,13 +11,18 @@ export const paths = (root: string) => ({
   config: join(root, 'agdd.config.json'),
 });
 
-const DEFAULT_CONFIG: Config = { wip: { spec: 3 } };
+export type Settings = Config & Readonly<{ limits: Limits }>;
 
-export const loadConfig = (root: string): Config => {
+const DEFAULT_CONFIG: Settings = {
+  wip: { spec: 3 },
+  limits: { rejections: 3, reworks: 3, sameFailure: 2 },
+};
+
+export const loadConfig = (root: string): Settings => {
   const file = paths(root).config;
   if (!existsSync(file)) return DEFAULT_CONFIG;
-  const raw = JSON.parse(readFileSync(file, 'utf8')) as Partial<Config>;
-  return { ...DEFAULT_CONFIG, ...raw, wip: { ...DEFAULT_CONFIG.wip, ...raw.wip } };
+  const raw = JSON.parse(readFileSync(file, 'utf8')) as { wip?: Partial<Settings['wip']>; limits?: Partial<Limits> };
+  return { wip: { ...DEFAULT_CONFIG.wip, ...raw.wip }, limits: { ...DEFAULT_CONFIG.limits, ...raw.limits } };
 };
 
 export const loadStates = (root: string): RequirementState[] => {

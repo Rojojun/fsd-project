@@ -1,11 +1,9 @@
-import { PRIORITIES } from './model.ts';
-import type { RequirementDoc, RequirementState, Status } from './model.ts';
+import { PRIORITIES, SPEC_DONE } from './model.ts';
+import type { RequirementDoc, RequirementState } from './model.ts';
 
 export type Config = Readonly<{ wip: Readonly<{ spec: number }> }>;
 export type Pick = { id: string; reason?: undefined } | { id: null; reason: string };
 type PickNode = 'spec' | 'dev' | 'verify';
-
-const SPEC_DONE: readonly Status[] = ['specified', 'in-dev', 'implemented', 'verified'];
 
 /** 노드별 후보 그룹. 앞 그룹이 먼저다. */
 const GROUPS: Record<PickNode, readonly ((s: RequirementState) => boolean)[]> = {

@@ -97,3 +97,47 @@ test('requirements 폴더가 없으면 안내와 함께 실패한다', () => {
   assert.match(r.stderr, /requirements/);
   assert.doesNotMatch(r.stderr, /ENOENT|at /);
 });
+
+test('status는 상태 안의 세부 단계와 막고 있는 선행 요구사항을 보여 준다', () => {
+  const root = workspace({
+    'A-1.md': req('A-1'),
+    'B-1.md': req('B-1').replace('priority: P1', 'priority: P1\ndepends: [A-1]'),
+  });
+  const out = run(root, 'status').stdout;
+  assert.match(out, /A-1.*cataloged.*ready/);
+  assert.match(out, /B-1.*cataloged.*blocked-by-dependency.*A-1/);
+});
+
+test('status --json은 요구사항별 상태와 플래그를 기계가 읽을 수 있게 내보낸다', () => {
+  const root = workspace({ 'A-1.md': req('A-1') });
+  const r = run(root, 'status', '--json');
+  assert.equal(r.status, 0, r.stderr);
+  const [item] = JSON.parse(r.stdout);
+  assert.equal(item.id, 'A-1');
+  assert.equal(item.status, 'cataloged');
+  assert.equal(item.flags.phase, 'ready');
+  assert.equal(item.flags.rejections, 0);
+});
+
+test('반려가 한도에 닿으면 다음 명령에서 질문 대기가 붙어 노드 후보에서 빠진다', () => {
+  const root = workspace({ 'A-1.md': req('A-1') });
+  run(root, 'sync');
+  const reject = (s: RequirementState) =>
+    apply(apply(s, 'draftSpec', 'spec', { specHash: 'h' }, at), 'reject', 'human', { reason: 'r' }, at);
+  writeState(root, reject(reject(reject(stateOf(root, 'A-1')))));
+
+  assert.match(run(root, 'next', 'spec').stdout, /후보가 없습니다/);
+  const s = stateOf(root, 'A-1');
+  assert.equal(s.holds[0]?.kind, 'question');
+  assert.match(s.holds[0].message, /3회 반려/);
+});
+
+test('반복 한도는 agdd.config.json으로 바꿀 수 있다', () => {
+  const root = workspace({ 'A-1.md': req('A-1') });
+  writeFileSync(join(root, 'agdd.config.json'), JSON.stringify({ limits: { rejections: 1 } }));
+  run(root, 'sync');
+  const s = stateOf(root, 'A-1');
+  writeState(root, apply(apply(s, 'draftSpec', 'spec', { specHash: 'h' }, at), 'reject', 'human', { reason: 'r' }, at));
+  run(root, 'status');
+  assert.equal(stateOf(root, 'A-1').holds[0]?.kind, 'question');
+});

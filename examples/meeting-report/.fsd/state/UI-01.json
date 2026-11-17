@@ -1,0 +1,38 @@
+{
+  "designRequired": true,
+  "approvedDesignHash": null,
+  "id": "UI-01",
+  "status": "specified",
+  "reqHash": "f5be3b9e7ad121e2a3bc07b727fd47592fbfc2cea0890c637a4c1f5f6be8e4e4",
+  "holds": [],
+  "approvedSpecHash": "82e7cd635df3b7a03fb5dec20e100033148f2fb985077ad25918107840f0dac7",
+  "bug": null,
+  "decisions": [],
+  "feedback": [],
+  "history": [
+    {
+      "from": null,
+      "to": "cataloged",
+      "transition": "register",
+      "actor": "sync",
+      "at": "2026-11-17T07:43:17.503Z",
+      "message": "요구사항 등록"
+    },
+    {
+      "from": "cataloged",
+      "to": "cataloged",
+      "transition": "draftSpec",
+      "actor": "spec",
+      "at": "2026-11-17T07:43:17.679Z",
+      "message": "스펙 초안 제출 → 승인 대기"
+    },
+    {
+      "from": "cataloged",
+      "to": "specified",
+      "transition": "approveSpec",
+      "actor": "human",
+      "at": "2026-11-17T07:44:37.591Z",
+      "message": "스펙 승인 (디자인 필요)"
+    }
+  ]
+}

@@ -5,11 +5,14 @@ import type { RequirementDoc } from './model.ts';
 
 export type Acceptance = Readonly<{ id: string; given: string; when: string; then: string }>;
 export type PolicyUse = Readonly<{ id: string; applied: string }>;
+/** 이 요구사항에 화면 디자인이 필요한가. spec 노드가 판단하고 사람이 스펙과 함께 승인한다. */
+export type DesignNeed = Readonly<{ needed: boolean; reason: string }>;
 export type Spec = Readonly<{
   summary: string;
   contract: string;
   acceptance: readonly Acceptance[];
   policies: readonly PolicyUse[];
+  design: DesignNeed;
 }>;
 /** 저장된 스펙. 어느 요구사항 내용을 보고 썼는지(reqHash) 함께 남긴다. */
 export type SavedSpec = Spec & Readonly<{ id: string; reqHash: string }>;
@@ -34,6 +37,7 @@ export const SPEC_OUTPUT_SCHEMA = strict({
         contract: text,
         acceptance: { type: 'array', items: strict({ id: text, given: text, when: text, then: text }) },
         policies: { type: 'array', items: strict({ id: text, applied: text }) },
+        design: strict({ needed: { type: 'boolean' }, reason: text }),
       }),
     ],
   },
@@ -69,6 +73,8 @@ const specErrors = (spec: unknown, doc: RequirementDoc): string[] => {
     ...doc.policies.filter(id => !cited.includes(id)).map(id => `요구사항이 근거로 든 정책 ${id}을(를) 스펙이 다루지 않았습니다.`),
     ...cited.filter(id => !doc.policies.includes(id)).map(id => `요구사항에 없는 정책 ${id}을(를) 인용했습니다.`),
     ...policies.filter(p => !filled(p.applied)).map(p => `정책 ${String(p.id)}을(를) 어떻게 적용했는지 비어 있습니다.`),
+    !(isObject(spec.design) && typeof spec.design.needed === 'boolean' && filled(spec.design.reason)) &&
+      'spec.design에 디자인 필요 여부(needed)와 이유(reason)가 필요합니다.',
   ].filter((e): e is string => typeof e === 'string');
 };
 
@@ -123,4 +129,6 @@ export const renderSpec = (spec: Spec): string =>
       .map(a => `- **${a.id}**\n  - 조건: ${a.given}\n  - 행동: ${a.when}\n  - 결과: ${a.then}`)
       .join('\n')}`,
     spec.policies.length ? `## 적용한 정책\n\n${spec.policies.map(p => `- **${p.id}**: ${p.applied}`).join('\n')}` : '',
+    // 디자인 항목이 생기기 전에 저장된 스펙에는 이 값이 없다.
+    spec.design ? `## 디자인\n\n${spec.design.needed ? '필요' : '필요 없음'}: ${spec.design.reason}` : '',
   ].filter(Boolean).join('\n\n');

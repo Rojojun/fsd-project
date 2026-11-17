@@ -65,6 +65,7 @@ const sampleSpec = {
   summary: '요약 문장', contract: '계약 내용',
   acceptance: [{ id: 'AC-1', given: 'g', when: 'w', then: '결과 문장' }],
   policies: [],
+  design: { needed: false, reason: '화면 없음' },
 };
 /** 스펙 초안이 제출된 상태를 만든다: 스펙 파일 + 그 해시에 묶인 승인 대기 */
 const draft = (root: string, id: string) => {

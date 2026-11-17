@@ -19,6 +19,7 @@ const spec = (policies: { id: string; applied: string }[] = []) => ({
   summary: '요약', contract: '계약',
   acceptance: [{ id: 'AC-1', given: 'g', when: 'w', then: 't' }],
   policies,
+  design: { needed: false, reason: '화면 없음' },
 });
 /** 정해진 출력을 돌려주고 받은 과제를 기록하는 에이전트 */
 const fakeAgent = (result: { output: unknown } | { reason: 'timeout'; detail: string }) => {

@@ -18,6 +18,7 @@ const spec = {
     { id: 'AC-2', given: '항목이 없을 때', when: 'GET /tasks', then: '빈 배열을 돌려준다' },
   ],
   policies: [{ id: 'newest-first', applied: '정렬 방향을 내림차순으로 정했다' }],
+  design: { needed: false, reason: '화면이 없는 API다' },
 };
 const done = (override: object = {}) => ({ status: 'done', questions: [], spec: { ...spec, ...override } });
 const errorsOf = (output: unknown) => {
@@ -98,4 +99,19 @@ test('사람이 읽을 스펙 문서는 인수 조건을 ID와 함께 보여 준
 test('행동(when)에 결과(then)를 되풀이해 쓰면 거부한다', () => {
   const repeated = [{ id: 'AC-1', given: '항목이 있을 때', when: 'GET /tasks를 요청하면 상태 코드가 200이다.', then: '상태 코드가 200이다.' }];
   assert.match(errorsOf(done({ acceptance: repeated })), /AC-1.*행동.*결과/);
+});
+
+test('디자인 필요 여부와 이유가 없으면 거부한다', () => {
+  assert.match(errorsOf(done({ design: undefined })), /design/);
+  assert.match(errorsOf(done({ design: { needed: true, reason: ' ' } })), /design/);
+});
+
+test('사람이 읽을 스펙 문서는 디자인 필요 여부와 이유를 보여 준다', () => {
+  assert.match(renderSpec(spec), /디자인.*필요 없음.*화면이 없는 API다/s);
+  assert.match(renderSpec({ ...spec, design: { needed: true, reason: '목록 화면이 새로 생긴다' } }), /디자인.*필요.*목록 화면이 새로 생긴다/s);
+});
+
+test('디자인 항목이 생기기 전에 저장된 스펙도 읽어서 보여 줄 수 있다', () => {
+  const { design: _omitted, ...old } = spec;
+  assert.doesNotThrow(() => renderSpec(old as typeof spec));
 });

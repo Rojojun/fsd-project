@@ -1,6 +1,6 @@
-import { SPEC_DONE } from './model.ts';
+import { ASPECTS, SPEC_DONE } from './model.ts';
 import { apply } from './transitions.ts';
-import type { Actor, HistoryEntry, RequirementDoc, RequirementState } from './model.ts';
+import type { Actor, Aspect, HistoryEntry, RequirementDoc, RequirementState } from './model.ts';
 
 /**
  * 플래그는 저장하지 않는다. 상태와 이력에서 매번 계산한다.
@@ -23,7 +23,9 @@ export type Flags = Readonly<{
   phase: Phase;
   /** 스펙이 확정되지 않아 이 요구사항을 막고 있는 선행 요구사항 */
   blockedBy: readonly string[];
-  staleReason: 'requirement-changed' | 'respec' | null;
+  staleReason: 'requirement-changed' | 'respec' | 'design-returned' | null;
+  /** 디자인 검토의 관점별 상태. 디자인이 필요 없으면 null */
+  review: Readonly<Record<Aspect, ReviewState>> | null;
   /** 현재 요구사항 내용에서 스펙 초안이 반려된 횟수 */
   rejections: number;
   /** 현재 승인 스펙에서 E2E 실패로 되돌아온 횟수 */
@@ -33,6 +35,9 @@ export type Flags = Readonly<{
   /** 가장 오래된 대기가 시작된 시각 */
   waitingSince: string | null;
 }>;
+
+/** none: 검토할 초안이 없음. pending: 검토 대기. approved: 승인. rejected: 이 관점에서 반려되어 다시 그려야 함. */
+export type ReviewState = 'none' | 'pending' | 'approved' | 'rejected';
 
 export type Limits = Readonly<{ rejections: number; reworks: number; sameFailure: number }>;
 
@@ -78,6 +83,22 @@ const phaseOf = (state: RequirementState, blocked: boolean, rejections: number):
   }
 };
 
+const DESIGN_STAGE = ['specified', 'designed', 'in-dev', 'implemented', 'verified'];
+
+const reviewOf = (state: RequirementState): Flags['review'] => {
+  if (!state.designRequired || !DESIGN_STAGE.includes(state.status)) return null;
+  const each = (of: (aspect: Aspect) => ReviewState) => Object.fromEntries(ASPECTS.map(a => [a, of(a)])) as Record<Aspect, ReviewState>;
+  if (state.approvedDesignHash !== null) return each(() => 'approved');
+
+  const waiting = state.holds.filter(h => h.kind === 'approval' && h.raisedBy === 'design');
+  if (waiting.length) return each(a => (waiting.some(h => h.aspect === a) ? 'pending' : 'approved'));
+
+  // 대기가 없다: 아직 초안이 없거나, 마지막 초안이 반려됐다.
+  const last = since(state.history, ['approveSpec']).findLast(h => h.transition === 'draftDesign' || h.transition === 'reject');
+  if (last?.transition !== 'reject') return each(() => 'none');
+  return each(a => (last.note === 'all' || last.note === a ? 'rejected' : 'none'));
+};
+
 export const flagsOf = (
   state: RequirementState,
   doc: RequirementDoc | undefined,
@@ -88,13 +109,17 @@ export const flagsOf = (
   const blockedBy = preSpec ? (doc?.depends ?? []).filter(dep => !SPEC_DONE.includes(statusById.get(dep)!)) : [];
   const count = counters(state);
   const staleCause = state.status === 'stale'
-    ? state.history.findLast(h => h.transition === 'invalidate' || h.transition === 'respec')?.transition
+    ? state.history.findLast(h => ['invalidate', 'respec', 'returnToSpec'].includes(h.transition))?.transition
     : undefined;
 
   return {
     phase: phaseOf(state, blockedBy.length > 0, count.rejections),
     blockedBy,
-    staleReason: staleCause === 'invalidate' ? 'requirement-changed' : staleCause === 'respec' ? 'respec' : null,
+    staleReason: staleCause === 'invalidate' ? 'requirement-changed'
+      : staleCause === 'respec' ? 'respec'
+      : staleCause === 'returnToSpec' ? 'design-returned'
+      : null,
+    review: reviewOf(state),
     ...count,
     waitingSince: state.holds.map(h => h.at).sort()[0] ?? null,
   };

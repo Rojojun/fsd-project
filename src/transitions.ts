@@ -1,5 +1,5 @@
-import { NODES, SPEC_DONE } from './model.ts';
-import type { Actor, Hold, HoldKind, RequirementState, Status } from './model.ts';
+import { ASPECTS, NODES, SPEC_DONE } from './model.ts';
+import type { Actor, Aspect, Hold, HoldKind, RequirementState, Status } from './model.ts';
 
 /** docs/graph.md의 "전이 규칙" 표를 그대로 옮긴 것 */
 
@@ -15,8 +15,9 @@ type Inputs = {
   answer: { answer: string; holdId?: string };
   draftDesign: { designHash: string };
   approveSpec: { specHash: string; needsDesign?: boolean };
-  approveDesign: { designHash: string };
-  reject: { reason: string };
+  approveDesign: { designHash: string; aspect?: Aspect };
+  returnToSpec: { reason: string };
+  reject: { reason: string; aspect?: Aspect };
   startDev: Record<string, never>;
   finishDev: { specHash: string; designHash?: string };
   passVerify: Record<string, never>;
@@ -29,7 +30,8 @@ type Ctx<I> = Readonly<{ state: RequirementState; input: I; actor: Actor; at: st
 
 type Rule<I> = Readonly<{
   from: readonly Status[];
-  to: Status | 'keep';
+  /** 'keep'은 상태 유지. 함수면 전이할 때 정한다. */
+  to: Status | 'keep' | ((ctx: Ctx<I>) => Status);
   actors: readonly Actor[];
   guard?: (ctx: Ctx<I>) => string | null;
   effect?: (ctx: Ctx<I>) => Partial<RequirementState>;
@@ -45,14 +47,19 @@ const POST_SPEC = SPEC_DONE;
 const holdsOf = (s: RequirementState, kind: HoldKind) => s.holds.filter(h => h.kind === kind);
 const without = (s: RequirementState, kind: HoldKind) => s.holds.filter(h => h.kind !== kind);
 
-const newHold = (ctx: Ctx<unknown>, kind: HoldKind, message: string, artifactHash: string | null): Hold => ({
-  id: `${kind === 'question' ? 'Q' : 'A'}${ctx.state.history.length}`,
+const newHold = (ctx: Ctx<unknown>, kind: HoldKind, message: string, artifactHash: string | null, aspect?: Aspect): Hold => ({
+  id: `${kind === 'question' ? 'Q' : 'A'}${ctx.state.history.length}${aspect ? `-${aspect}` : ''}`,
   kind,
   raisedBy: ctx.actor,
   message,
   at: ctx.at,
   artifactHash,
+  ...(aspect ? { aspect } : {}),
 });
+
+/** 디자인 초안의 승인 대기. 관점을 주면 그 관점의 것만. */
+const designApprovals = (s: RequirementState, aspect?: Aspect) =>
+  s.holds.filter(h => h.kind === 'approval' && h.raisedBy === 'design' && (!aspect || h.aspect === aspect));
 
 const findQuestion = (s: RequirementState, holdId?: string): Hold | string => {
   const questions = holdsOf(s, 'question');
@@ -127,27 +134,61 @@ const RULES: { [N in TransitionName]: Rule<Inputs[N]> } = {
   draftDesign: {
     from: ['specified'], to: 'keep', actors: ['design'],
     guard: ({ state }) => (state.designRequired ? null : '디자인이 필요한 요구사항이 아닙니다.'),
-    effect: ctx => ({ holds: [...ctx.state.holds, newHold(ctx, 'approval', '디자인 초안 승인 요청', ctx.input.designHash)] }),
+    // 두 관점의 검토를 따로 받는다.
+    effect: ctx => ({
+      holds: [
+        ...ctx.state.holds,
+        ...ASPECTS.map(aspect => newHold(ctx, 'approval', `디자인 초안 ${aspect.toUpperCase()} 검토 요청`, ctx.input.designHash, aspect)),
+      ],
+    }),
     message: () => '디자인 초안 제출 → 승인 대기',
   },
   approveDesign: {
-    from: ['specified'], to: 'designed', actors: ['human'],
+    // 두 관점이 모두 승인되어야 designed가 된다. 한 관점만 승인하면 specified에 머문다.
+    from: ['specified'], actors: ['human'],
+    to: ({ state, input }) => (input.aspect && designApprovals(state).some(h => h.aspect !== input.aspect) ? 'specified' : 'designed'),
     guard: ({ state, input }) => {
-      const approval = holdsOf(state, 'approval').find(h => h.raisedBy === 'design');
-      if (!approval) return '승인 대기 중인 디자인 초안이 없습니다.';
+      const [approval] = designApprovals(state, input.aspect);
+      if (!approval) {
+        return input.aspect ? `${input.aspect} 관점은 승인 대기 중이 아닙니다.` : '승인 대기 중인 디자인 초안이 없습니다.';
+      }
       return approval.artifactHash === input.designHash ? null : '승인하려는 디자인 해시가 제출된 초안과 다릅니다.';
     },
-    effect: ({ state, input }) => ({ holds: without(state, 'approval'), approvedDesignHash: input.designHash }),
-    message: () => '디자인 승인',
+    effect: ({ state, input }) => {
+      const approved = new Set(designApprovals(state, input.aspect).map(h => h.id));
+      const holds = state.holds.filter(h => !approved.has(h.id));
+      const allApproved = !holds.some(h => h.kind === 'approval' && h.raisedBy === 'design');
+      return { holds, ...(allApproved ? { approvedDesignHash: input.designHash } : {}) };
+    },
+    message: ({ input }) => (input.aspect ? `디자인 ${input.aspect.toUpperCase()} 관점 승인` : '디자인 승인'),
+  },
+  returnToSpec: {
+    // 디자인의 근거(디자인 언어)가 정해지지 않았으면 그리지 않고 spec 단계로 되돌린다.
+    from: ['specified'], to: 'stale', actors: ['design'],
+    effect: ({ state, input, at }) => ({
+      holds: [],
+      feedback: [...state.feedback, { message: input.reason, specHash: state.approvedSpecHash, at, about: 'spec' as const }],
+    }),
+    message: ({ input }) => `spec 단계로 되돌림: ${input.reason}`,
   },
   reject: {
     from: ALIVE, to: 'keep', actors: ['human'],
     guard: ({ state }) => (holdsOf(state, 'approval').length ? null : '승인 대기가 없습니다.'),
-    effect: ({ state, input, at }) => ({
-      holds: without(state, 'approval'),
-      feedback: [...state.feedback, { message: input.reason, specHash: holdsOf(state, 'approval')[0].artifactHash, at }],
-    }),
-    message: ({ input }) => `반려: ${input.reason}`,
+    // 한 관점의 반려라도 초안 전체를 다시 만든다. 어느 관점의 지적인지는 남긴다.
+    effect: ({ state, input, at }) => {
+      const [approval] = holdsOf(state, 'approval');
+      const onDesign = approval.raisedBy === 'design';
+      return {
+        holds: without(state, 'approval'),
+        feedback: [...state.feedback, {
+          message: input.reason, specHash: approval.artifactHash, at,
+          about: onDesign ? 'design' as const : 'spec' as const,
+          ...(onDesign && input.aspect ? { aspect: input.aspect } : {}),
+        }],
+      };
+    },
+    message: ({ input }) => `반려${input.aspect ? `(${input.aspect.toUpperCase()})` : ''}: ${input.reason}`,
+    note: ({ input }) => input.aspect ?? 'all',
   },
   startDev: {
     from: ['specified', 'designed'], to: 'in-dev', actors: ['dev'],
@@ -181,7 +222,7 @@ const RULES: { [N in TransitionName]: Rule<Inputs[N]> } = {
     from: POST_SPEC, to: 'stale', actors: ['human'],
     effect: ({ state, input, at }) => ({
       holds: [],
-      feedback: [...state.feedback, { message: input.reason, specHash: state.approvedSpecHash, at }],
+      feedback: [...state.feedback, { message: input.reason, specHash: state.approvedSpecHash, at, about: 'spec' as const }],
     }),
     message: ({ input }) => `스펙 재확정 결정: ${input.reason}`,
   },
@@ -204,11 +245,12 @@ export const apply = <N extends TransitionName>(
   input: Inputs[N],
   at: string,
 ): RequirementState => {
-  const rule = RULES[name] as Rule<Inputs[N]>;
+  // 규칙 표는 전이 이름마다 입력 형식이 다르다. 이름으로 고른 규칙을 그 이름의 입력 형식으로 본다.
+  const rule = RULES[name] as unknown as Rule<Inputs[N]>;
   const ctx: Ctx<Inputs[N]> = { state, input, actor, at };
   const error = violation(rule, name, ctx);
   if (error) throw new TransitionError(error);
-  const to = rule.to === 'keep' ? state.status : rule.to;
+  const to = rule.to === 'keep' ? state.status : typeof rule.to === 'function' ? rule.to(ctx) : rule.to;
   return {
     ...state,
     ...rule.effect?.(ctx),

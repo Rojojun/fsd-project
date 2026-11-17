@@ -103,3 +103,64 @@ test('designed도 선행 요구사항의 스펙이 확정된 것으로 본다', 
   const docs = [doc('A'), doc('B', ['A'])];
   assert.deepEqual(pickNext('spec', docs, [designed('A'), register('B', 'h', at)], config), { id: 'B' });
 });
+
+// ── UI/UX 두 관점의 검토, 디자인 언어가 없을 때의 되돌림 ──
+
+const reviewOf = (s: RequirementState) => flagsOf(s, doc(s.id), [s]).review;
+
+test('디자인 초안은 UI와 UX 두 관점의 승인 대기를 따로 붙인다', () => {
+  const s = designDrafted();
+  assert.deepEqual(s.holds.map(h => h.aspect), ['ui', 'ux']);
+  assert.equal(new Set(s.holds.map(h => h.id)).size, 2);
+  assert.deepEqual(reviewOf(s), { ui: 'pending', ux: 'pending' });
+});
+
+test('한 관점만 승인하면 specified에 머물고, 두 관점이 모두 승인되어야 designed가 된다', () => {
+  const uiOnly = apply(designDrafted(), 'approveDesign', 'human', { designHash: 'd1', aspect: 'ui' }, at);
+  assert.equal(uiOnly.status, 'specified');
+  assert.equal(uiOnly.approvedDesignHash, null);
+  assert.deepEqual(reviewOf(uiOnly), { ui: 'approved', ux: 'pending' });
+  rejects(/대기/, () => apply(uiOnly, 'startDev', 'dev', {}, at));
+
+  const both = apply(uiOnly, 'approveDesign', 'human', { designHash: 'd1', aspect: 'ux' }, at);
+  assert.equal(both.status, 'designed');
+  assert.equal(both.approvedDesignHash, 'd1');
+  assert.deepEqual(reviewOf(both), { ui: 'approved', ux: 'approved' });
+});
+
+test('이미 승인한 관점을 다시 승인할 수 없다', () => {
+  const uiOnly = apply(designDrafted(), 'approveDesign', 'human', { designHash: 'd1', aspect: 'ui' }, at);
+  rejects(/ui/, () => apply(uiOnly, 'approveDesign', 'human', { designHash: 'd1', aspect: 'ui' }, at));
+});
+
+test('한 관점에서 반려하면 초안 전체가 다시 그리기로 가고, 어느 관점의 지적인지 남는다', () => {
+  const uiApproved = apply(designDrafted(), 'approveDesign', 'human', { designHash: 'd1', aspect: 'ui' }, at);
+  const rejected = apply(uiApproved, 'reject', 'human', { reason: '완료 후 무엇이 바뀌었는지 알 수 없다', aspect: 'ux' }, at);
+  assert.deepEqual(rejected.holds, []);
+  assert.deepEqual(rejected.feedback.at(-1), { message: '완료 후 무엇이 바뀌었는지 알 수 없다', specHash: 'd1', at, about: 'design', aspect: 'ux' });
+  assert.deepEqual(reviewOf(rejected), { ui: 'none', ux: 'rejected' });
+});
+
+test('관점을 밝히지 않은 반려는 두 관점 모두의 반려다', () => {
+  const rejected = apply(designDrafted(), 'reject', 'human', { reason: '전체적으로 다시' }, at);
+  assert.deepEqual(reviewOf(rejected), { ui: 'rejected', ux: 'rejected' });
+});
+
+test('스펙 초안의 반려는 스펙에 대한 지적으로 남는다', () => {
+  const drafted = apply(register('A', 'h', at), 'draftSpec', 'spec', { specHash: 's' }, at);
+  assert.equal(apply(drafted, 'reject', 'human', { reason: 'r' }, at).feedback.at(-1)?.about, 'spec');
+});
+
+test('디자인이 필요 없으면 검토 플래그가 없고, 초안 전이면 none이다', () => {
+  assert.equal(reviewOf(specified('A', false)), null);
+  assert.deepEqual(reviewOf(specified('A', true)), { ui: 'none', ux: 'none' });
+});
+
+test('returnToSpec: design은 디자인 언어가 없으면 요구사항을 spec 단계로 되돌리고 이유를 남긴다', () => {
+  const s = apply(specified('A', true), 'returnToSpec', 'design', { reason: '디자인 언어가 정해지지 않았다' }, at);
+  assert.equal(s.status, 'stale');
+  assert.deepEqual(s.feedback.at(-1), { message: '디자인 언어가 정해지지 않았다', specHash: 's', at, about: 'spec' });
+  assert.equal(flagsOf(s, doc('A'), [s]).staleReason, 'design-returned');
+  assert.deepEqual(pickNext('spec', [doc('A')], [s], config), { id: 'A' });
+  rejects(/human/, () => apply(specified('A', true), 'returnToSpec', 'human', { reason: 'r' }, at));
+});

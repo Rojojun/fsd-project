@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFile
 import { join } from 'node:path';
 import type { Limits } from './flags.ts';
 import type { LinearFilter } from './sources/linear.ts';
+import type { Prices } from './cost.ts';
 import type { Config } from './select.ts';
 import type { RequirementState } from './model.ts';
 
@@ -29,6 +30,8 @@ export type Settings = Config & Readonly<{
   verify: Readonly<{ command: string | null; timeoutMs: number }>;
   /** 요구사항을 어디서 가져오는가. linear가 없으면 requirements/ 에 사람이 직접 쓴다 */
   source: Readonly<{ linear: LinearFilter | null }>;
+  /** 비용을 알려 주지 않는 에이전트(codex)의 단가. 100만 토큰당 달러. 키는 모델 이름 또는 에이전트 이름 */
+  prices: Prices;
 }>;
 
 const DEFAULT_CONFIG: Settings = {
@@ -47,6 +50,7 @@ const DEFAULT_CONFIG: Settings = {
   agent: { timeoutMs: 600_000, maxTurns: 30 },
   verify: { command: null, timeoutMs: 600_000 },
   source: { linear: null },
+  prices: {},
 };
 
 export const loadConfig = (root: string): Settings => {
@@ -65,6 +69,7 @@ export const loadConfig = (root: string): Settings => {
     agent: { ...DEFAULT_CONFIG.agent, ...raw.agent },
     verify: { ...DEFAULT_CONFIG.verify, ...raw.verify },
     source: { ...DEFAULT_CONFIG.source, ...raw.source } as Settings['source'],
+    prices: { ...DEFAULT_CONFIG.prices, ...raw.prices } as Prices,
   };
 };
 

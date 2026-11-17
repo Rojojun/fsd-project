@@ -11,6 +11,8 @@ import { codexAgent } from './agents/codex.ts';
 import type { Agent } from './agents/types.ts';
 import { loadCatalog } from './catalog.ts';
 import { appendLanguageRules, chooseSurface, designHash, missingLanguage, readDesign, readDesignLanguage, renderDesign } from './design.ts';
+import { formatUsd, loadRuns, summarizeCost } from './cost.ts';
+import type { CostLine, CostSummary } from './cost.ts';
 import { escalate, flagsOf } from './flags.ts';
 import type { Flags } from './flags.ts';
 import { tickDesign } from './nodes/design.ts';
@@ -37,6 +39,7 @@ const USAGE = `사용법: fsd <명령>
   pull [--dry-run]           Linear의 이슈를 요구사항 파일로 가져온다 (init에서 Linear를 고른 경우)
   status [--json]            요구사항별 상태, 세부 단계, 대기 사유
   sync                       요구사항 파일 변경만 반영
+  cost [--json]              에이전트 호출 비용: 전체, 요구사항별, 노드별, 에이전트별
   show <ID>                  요구사항 하나의 상태, 질문, 스펙 초안
   next <spec|design|dev|verify>  노드가 다음에 고를 후보 (실행하지 않음)
   tick <spec|design|dev|verify> [--agent 이름]  노드를 한 사이클 실행 (claude | codex)
@@ -85,28 +88,56 @@ const phaseLabel = (f: Flags) => {
   return facts.length ? `${f.phase}(${facts.join(' · ')})` : f.phase;
 };
 
-const report = ({ docs, states }: Ctx) => {
+const costOf = (ctx: Ctx): CostSummary => summarizeCost(loadRuns(paths(ctx.root).runs), loadConfig(ctx.root).prices);
+
+const report = (ctx: Ctx) => {
+  const { docs, states } = ctx;
   const docById = new Map(docs.map(d => [d.id, d]));
-  return states.map(s => ({ state: s, doc: docById.get(s.id), flags: flagsOf(s, docById.get(s.id), states) }));
+  const costById = new Map(costOf(ctx).byRequirement.map(c => [c.key, c]));
+  return states.map(s => ({ state: s, doc: docById.get(s.id), flags: flagsOf(s, docById.get(s.id), states), cost: costById.get(s.id) ?? null }));
+};
+
+const NO_COST = { costUsd: 0, estimated: 0, unpriced: 0 };
+
+const costRows = (lines: readonly CostLine[]) =>
+  lines.map(c => [
+    c.key, String(c.calls), formatUsd(c), c.inputTokens.toLocaleString('en-US'), c.outputTokens.toLocaleString('en-US'),
+    `${Math.round(c.durationMs / 60_000)}분`,
+  ]);
+
+const costReport = (s: CostSummary) => {
+  if (s.total.calls === 0) return '에이전트 호출 기록이 없습니다.';
+  const head = (name: string) => [name, '호출', '비용', '입력 토큰', '출력 토큰', '시간'];
+  return [
+    table([head(''), ...costRows([s.total])]),
+    `## 요구사항별\n${table([head('요구사항'), ...costRows(s.byRequirement)])}`,
+    `## 노드별\n${table([head('노드'), ...costRows(s.byNode)])}`,
+    `## 에이전트별\n${table([head('에이전트 · 모델'), ...costRows(s.byAgent)])}`,
+    s.total.unpriced
+      ? '가격 미설정: 비용을 알려 주지 않는 에이전트(codex)의 호출이다. fsd.config.json의 prices에 100만 토큰당 단가를 적으면 어림해서 더한다.'
+      : '',
+    s.total.estimated ? '≈ 표시는 설정의 단가로 토큰에서 어림한 금액이 섞였다는 뜻이다.' : '',
+  ].filter(Boolean).join('\n\n');
 };
 
 const status = (ctx: Ctx) => {
-  const rows = report(ctx).map(({ state: s, doc, flags }) => [
+  const rows = report(ctx).map(({ state: s, doc, flags, cost }) => [
     s.id,
     doc?.priority ?? '-',
     s.status,
     phaseLabel(flags),
     s.holds.map(holdName).join(' / ') || (s.bug && s.status === 'in-dev' ? `버그: ${s.bug.evidence.split('\n')[0].slice(0, 40)}` : ''),
+    formatUsd(cost ?? NO_COST),
     doc?.title ?? '',
   ]);
-  return table([['ID', '우선순위', '상태', '단계', '대기 사유', '제목'], ...rows]);
+  return table([['ID', '우선순위', '상태', '단계', '대기 사유', '비용', '제목'], ...rows]);
 };
 
 const statusJson = (ctx: Ctx) =>
   JSON.stringify(
-    report(ctx).map(({ state: s, doc, flags }) => ({
+    report(ctx).map(({ state: s, doc, flags, cost }) => ({
       id: s.id, title: doc?.title ?? null, priority: doc?.priority ?? null,
-      status: s.status, flags, holds: s.holds, bug: s.bug,
+      status: s.status, flags, holds: s.holds, bug: s.bug, cost,
     })),
     null,
     2,
@@ -418,6 +449,7 @@ const main = async (argv: string[]) => {
   const ctx: Ctx = { root, docs: catalog.docs, states: escalated.states, at, flags: args.filter(a => a.startsWith('--')) };
   const positional = args.filter(a => !a.startsWith('--'));
 
+  if (command === 'cost') return console.log(args.includes('--json') ? JSON.stringify(costOf(ctx), null, 2) : costReport(costOf(ctx)));
   if (command === 'status') return console.log(args.includes('--json') ? statusJson(ctx) : status(ctx));
   if (command === 'sync') return synced.changes.length || console.log('sync: 변경 없음');
   if (command === 'show') return console.log(show(ctx, positional[0]));

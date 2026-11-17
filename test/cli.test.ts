@@ -711,3 +711,61 @@ test('help는 어느 폴더에서든 사용법만 보여 주고, 아무것도 �
     assert.deepEqual(readdirSync(root), []);
   }
 });
+
+// ── 비용 집계 ──
+
+const writeRun = (root: string, name: string, record: object) => {
+  mkdirSync(join(root, '.fsd', 'runs'), { recursive: true });
+  writeFileSync(join(root, '.fsd', 'runs', `${name}.json`), JSON.stringify(record));
+};
+const usageOf = (costUsd: number | null, inputTokens = 1000, outputTokens = 100) => ({ costUsd, inputTokens, outputTokens, turns: 2, durationMs: 60_000 });
+const costProject = () => {
+  const root = workspace({ 'A-1.md': req('A-1'), 'B-1.md': req('B-1') });
+  run(root, 'sync');
+  writeRun(root, '1', { at, node: 'spec', id: 'A-1', agent: 'claude', model: 'claude-opus-5-5', outcome: 'drafted', usage: usageOf(0.4) });
+  writeRun(root, '2', { at, node: 'dev', id: 'A-1', agent: 'claude', model: 'claude-opus-5-5', outcome: 'implemented', usage: usageOf(1.1) });
+  writeRun(root, '3', { at, node: 'verify', id: 'A-1', agent: 'codex', model: null, outcome: 'verified', usage: usageOf(null, 400_000, 10_000) });
+  writeRun(root, '4', { at, node: 'audit', id: null, agent: 'claude', model: 'claude-opus-5-5', outcome: 'findings', usage: usageOf(0.3) });
+  return root;
+};
+
+test('cost: 전체, 요구사항별, 노드별, 에이전트별 비용을 보여 준다', () => {
+  const root = costProject();
+  const r = run(root, 'cost');
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /전체.*\$1\.80 \+ 가격 미설정 1회/);
+  assert.match(r.stdout, /A-1.*\$1\.50 \+ 가격 미설정 1회/);
+  assert.match(r.stdout, /\(공통\).*\$0\.30/);
+  assert.match(r.stdout, /verify.*가격 미설정 1회/);
+  assert.match(r.stdout, /codex.*401,000|codex.*400,000/);
+});
+
+test('cost: 설정에 단가가 있으면 codex 호출도 어림해서 더한다', () => {
+  const root = costProject();
+  writeFileSync(join(root, 'fsd.config.json'), JSON.stringify({ prices: { codex: { inputPer1M: 1.25, outputPer1M: 10 } } }));
+  const out = run(root, 'cost').stdout;
+  assert.match(out, /전체.*≈\$2\.40/);
+  assert.doesNotMatch(out, /가격 미설정/);
+});
+
+test('cost --json은 집계를 그대로 내보낸다', () => {
+  const r = run(costProject(), 'cost', '--json');
+  assert.equal(r.status, 0, r.stderr);
+  const s = JSON.parse(r.stdout);
+  assert.equal(s.total.calls, 4);
+  assert.equal(s.byRequirement[0].key, 'A-1');
+});
+
+test('status는 요구사항별 비용을 함께 보여 준다', () => {
+  const out = run(costProject(), 'status').stdout;
+  assert.match(out.split('\n')[0], /비용/);
+  assert.match(out, /A-1.*\$1\.50 \+ 가격 미설정 1회/);
+  assert.match(out, /B-1.*\s-\s/);
+  const json = JSON.parse(run(costProject(), 'status', '--json').stdout);
+  assert.equal(json.find((x: { id: string }) => x.id === 'A-1').cost.costUsd, 1.5);
+});
+
+test('호출 기록이 없으면 cost는 그렇다고 알린다', () => {
+  const root = workspace({ 'A-1.md': req('A-1') });
+  assert.match(run(root, 'cost').stdout, /호출 기록이 없습니다/);
+});

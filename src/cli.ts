@@ -4,7 +4,9 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { claudeAgent } from './agents/claude.ts';
 import { findServer, listServers } from './agents/mcp.ts';
-import { pullLinear } from './sources/linear.ts';
+import { runInit } from './init.ts';
+import { discoverLinear, pullLinear } from './sources/linear.ts';
+import { createInterface } from 'node:readline';
 import { codexAgent } from './agents/codex.ts';
 import type { Agent } from './agents/types.ts';
 import { loadCatalog } from './catalog.ts';
@@ -30,7 +32,9 @@ import type { Aspect, Hold, RequirementDoc, RequirementState } from './model.ts'
 class UsageError extends Error {}
 
 const USAGE = `사용법: agdd <명령>
-  pull [--dry-run]           Linear의 이슈를 요구사항 파일로 가져온다 (설정에 source.linear가 있을 때)
+  init [--linear [--project 이름|--team 이름]|--no-linear]
+                             처음 한 번: 요구사항을 Linear에서 가져올지 정한다
+  pull [--dry-run]           Linear의 이슈를 요구사항 파일로 가져온다 (init에서 Linear를 고른 경우)
   status [--json]            요구사항별 상태, 세부 단계, 대기 사유
   sync                       요구사항 파일 변경만 반영
   show <ID>                  요구사항 하나의 상태, 질문, 스펙 초안
@@ -303,9 +307,9 @@ const pull = async (root: string, at: string, args: string[]) => {
   const filter = config.source.linear;
   if (!filter || Object.keys(filter).length === 0) {
     throw new UsageError(
-      'Linear에서 가져올 범위가 정해져 있지 않습니다. agdd.config.json에 적어 주세요.\n'
-      + '예: { "source": { "linear": { "project": "회의 보고", "states": ["Todo", "In Progress"] } } }\n'
-      + 'team, project, label, states를 쓸 수 있습니다. Linear를 쓰지 않으면 requirements/<ID>.md를 직접 씁니다.',
+      '요구사항을 Linear에서 가져오도록 정해져 있지 않습니다(source.linear가 없음).\n'
+      + 'agdd init 을 실행하면 Linear를 쓸지 묻고, 쓴다면 가져올 범위를 고르게 합니다.\n'
+      + 'Linear를 쓰지 않으면 requirements/<ID>.md를 직접 씁니다.',
     );
   }
   const role = config.roles['linear-reader'];
@@ -338,10 +342,52 @@ const pull = async (root: string, at: string, args: string[]) => {
   ].filter(Boolean).join('\n'));
 };
 
+/** 묻고 한 줄을 받는다. 입력이 끝났으면 빈 답으로 친다. */
+const prompter = () => {
+  const lines = createInterface({ input: process.stdin })[Symbol.asyncIterator]();
+  return async (question: string) => {
+    process.stdout.write(question);
+    const next = await lines.next();
+    if (!process.stdin.isTTY) process.stdout.write('\n');
+    return next.done ? '' : next.value;
+  };
+};
+
+/** 처음 한 번 묻는다: 요구사항을 Linear에서 가져올 것인가. 쓴다고 할 때만 Linear를 살펴본다. */
+const init = async (root: string, at: string, args: string[]) => {
+  const config = loadConfig(root);
+  const role = config.roles['linear-reader'];
+  const discover = async () => {
+    const found = findServer(await listServers(role.agent), 'linear');
+    if (!found) {
+      return { ok: false as const, message: 'Linear MCP 서버가 연결되어 있지 않습니다(인증이 안 된 서버는 연결된 것으로 치지 않습니다). Linear를 연결한 뒤 agdd init을 다시 실행하세요.' };
+    }
+    console.log('Linear를 살펴보는 중입니다…');
+    const result = await discoverLinear({
+      root, server: found.server, agent: agentFor(found.agent),
+      settings: { ...config.agent, ...(role.model && found.agent === role.agent ? { model: role.model } : {}) },
+      skill: loadSkill(root, 'linear-scout'),
+    });
+    const { agent, model, usage } = result.run;
+    saveRun(root, at, { node: 'init', id: null, agent, model, outcome: result.ok ? 'discovered' : 'failed', usage });
+    return result;
+  };
+  const useLinear = args.includes('--linear') ? true : args.includes('--no-linear') ? false : undefined;
+  await runInit({
+    root, discover, log: line => console.log(line), ask: prompter(),
+    preset: { useLinear, project: option(args, '--project'), team: option(args, '--team') },
+  });
+  process.stdin.pause();
+};
+
 const main = async (argv: string[]) => {
   const [command = 'status', ...args] = argv;
   const root = resolve(process.env.AGDD_ROOT ?? process.cwd());
   const at = new Date().toISOString();
+
+  if (command === 'init') return init(root, at, args);
+  // 설정이 아직 없고 사람이 직접 실행했으면, 먼저 한 번 묻는다. 자동 실행(터미널이 아님)에서는 묻지 않고 기본값으로 간다.
+  if (!existsSync(paths(root).config) && process.stdin.isTTY && process.stdout.isTTY) await init(root, at, []);
 
   // pull은 요구사항 폴더가 아직 없어도 된다. 만드는 쪽이다.
   if (command === 'pull') return pull(root, at, args);

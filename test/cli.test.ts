@@ -629,3 +629,63 @@ test('pull: Linear가 연결되어 있지 않으면 에이전트를 부르지 �
   assert.match(r.stderr, /Linear.*연결.*requirements/s);
   assert.equal(existsSync(join(root, '.fake-bin', 'claude.args')), false);
 });
+
+// ── 처음에 묻기: agdd init ──
+
+const scopesOut = claudeOut({
+  projects: [{ name: '사내 위키', team: '플랫폼', ready: 2 }, { name: '회의 보고', team: '제품', ready: 7 }],
+  teams: [{ name: '제품', ready: 9 }],
+});
+const CONNECTED = 'linear: https://mcp.linear.app/mcp (HTTP) - ✔ Connected';
+/** 묻는 말에 차례로 답을 넣어 준다 */
+const runInput = (root: string, env: NodeJS.ProcessEnv, input: string, ...args: string[]) =>
+  spawnSync(process.execPath, [cli, ...args], { cwd: root, encoding: 'utf8', env, input });
+const sourceOf = (root: string) => JSON.parse(readFileSync(join(root, 'agdd.config.json'), 'utf8')).source;
+
+test('init: Linear를 쓸지 묻고, 쓰지 않는다고 하면 Linear를 살펴보지 않는다', () => {
+  const root = emptyProject();
+  const env = fakeDesigner(root, 'claude', { mcpList: CONNECTED, stdout: scopesOut });
+  const r = runInput(root, env, 'n\n', 'init');
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /Linear에서 가져올까요/);
+  assert.equal(sourceOf(root).linear, null);
+  assert.equal(existsSync(join(root, '.fake-bin', 'claude.args')), false);
+});
+
+test('init: 쓴다고 하면 Linear를 살펴본 후보를 보여 주고, 고른 범위를 설정에 남긴다', () => {
+  const root = emptyProject();
+  const env = fakeDesigner(root, 'claude', { mcpList: CONNECTED, stdout: scopesOut });
+  const r = runInput(root, env, 'y\n1\n', 'init');
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /1\) 프로젝트\s+회의 보고.*7건.*추천/);
+  assert.deepEqual(sourceOf(root).linear, { project: '회의 보고', stateTypes: ['unstarted', 'started'] });
+  assert.match(argsOf(root, 'claude'), /mcp__linear/);
+});
+
+test('init: 쓴다고 했는데 Linear가 연결되어 있지 않으면 알리고 파일로 쓰는 설정을 남긴다', () => {
+  const root = emptyProject();
+  const env = fakeDesigner(root, 'claude', { mcpList: 'graft: graft mcp - ✔ Connected', stdout: scopesOut });
+  const r = runInput(root, env, 'y\n', 'init');
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /연결되어 있지 않습니다/);
+  assert.equal(sourceOf(root).linear, null);
+});
+
+test('init: 옵션으로 답을 주면 묻지 않는다', () => {
+  const root = emptyProject();
+  const r = run(root, 'init', '--linear', '--project', '회의 보고');
+  assert.equal(r.status, 0, r.stderr);
+  assert.doesNotMatch(r.stdout, /가져올까요/);
+  assert.equal(sourceOf(root).linear.project, '회의 보고');
+  assert.equal(run(root, 'init', '--no-linear').status, 0);
+  assert.equal(sourceOf(root).linear, null);
+});
+
+test('init으로 고른 범위로 pull이 돈다', () => {
+  const root = emptyProject();
+  run(root, 'init', '--linear', '--project', '회의 보고');
+  const r = runEnv(root, linearEnv(root, [linearIssue('ENG-1')]), 'pull');
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(argsOf(root, 'claude'), /회의 보고/);
+  assert.match(argsOf(root, 'claude'), /unstarted, started/);
+});

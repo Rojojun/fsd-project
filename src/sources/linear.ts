@@ -26,7 +26,18 @@ export type LinearIssue = Readonly<{
   url: string;
 }>;
 
-export type LinearFilter = Readonly<{ team?: string; project?: string; label?: string; states?: readonly string[] }>;
+export type LinearFilter = Readonly<{
+  team?: string;
+  project?: string;
+  label?: string;
+  /** 상태의 이름으로 고를 때 (팀마다 다르다) */
+  states?: readonly string[];
+  /** 상태의 종류로 고를 때: triage, backlog, unstarted, started, completed */
+  stateTypes?: readonly string[];
+}>;
+
+/** 상태를 정하지 않았을 때: 시작 전과 진행 중. 백로그는 아직 하기로 정하지 않은 일이라 가져오지 않는다. */
+const DEFAULT_STATE_TYPES = ['unstarted', 'started'];
 
 const text = { type: 'string' };
 /** Linear를 읽는 에이전트가 돌려줘야 하는 형식 */
@@ -108,7 +119,10 @@ const describeFilter = (f: LinearFilter) =>
     f.team && `- 팀: ${f.team}`,
     f.project && `- 프로젝트: ${f.project}`,
     f.label && `- 라벨: ${f.label}`,
-    f.states?.length && `- 상태: ${f.states.join(', ')} (이 상태의 이슈만. 취소된 이슈는 상태와 무관하게 함께 가져온다)`,
+    f.states?.length
+      ? `- 상태: ${f.states.join(', ')} (이 이름의 상태에 있는 이슈만)`
+      : `- 상태의 종류: ${(f.stateTypes ?? DEFAULT_STATE_TYPES).join(', ')} (이 종류의 상태에 있는 이슈만)`,
+    '- 범위 안에서 취소된 이슈는 상태와 무관하게 함께 가져온다.',
   ].filter(Boolean).join('\n');
 
 const IDENTIFIER = /^[A-Z][A-Z0-9]*-\d+$/;
@@ -172,4 +186,54 @@ export const pullLinear = async (input: PullInput): Promise<PullResult> => {
     writes.forEach(file => writeFileSync(join(dir, file.name), file.text));
   }
   return { ok: true, ...result, skipped, missing, run };
+};
+
+/** 범위의 후보. ready는 시작 전이거나 진행 중인 이슈의 수 */
+export type LinearScopes = Readonly<{
+  projects: readonly Readonly<{ name: string; team: string; ready: number }>[];
+  teams: readonly Readonly<{ name: string; ready: number }>[];
+}>;
+
+/** Linear를 살펴보는 에이전트가 돌려줘야 하는 형식 */
+export const SCOPES_OUTPUT_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['projects', 'teams'],
+  properties: {
+    projects: {
+      type: 'array',
+      items: {
+        type: 'object', additionalProperties: false, required: ['name', 'team', 'ready'],
+        properties: { name: text, team: text, ready: { type: 'number' } },
+      },
+    },
+    teams: {
+      type: 'array',
+      items: { type: 'object', additionalProperties: false, required: ['name', 'ready'], properties: { name: text, ready: { type: 'number' } } },
+    },
+  },
+};
+
+const isScopes = (v: unknown): v is LinearScopes => {
+  const s = v as Partial<LinearScopes> | null;
+  const named = (x: unknown) => typeof (x as { name?: unknown })?.name === 'string' && typeof (x as { ready?: unknown })?.ready === 'number';
+  return typeof s === 'object' && s !== null && Array.isArray(s.projects) && Array.isArray(s.teams)
+    && s.projects.every(p => named(p) && typeof (p as { team?: unknown }).team === 'string') && s.teams.every(named);
+};
+
+/** Linear에 어떤 프로젝트와 팀이 있는지 살펴본다. 처음에 범위를 고를 때 쓴다. 읽기만 한다. */
+export const discoverLinear = async (
+  input: Pick<PullInput, 'root' | 'agent' | 'server' | 'settings' | 'skill'>,
+): Promise<{ ok: true; scopes: LinearScopes; run: AgentResult } | { ok: false; message: string; run: AgentResult }> => {
+  const run = await input.agent({
+    prompt: input.skill.trim(),
+    schema: SCOPES_OUTPUT_SCHEMA,
+    cwd: input.root,
+    access: 'read-only',
+    mcp: [input.server],
+    ...input.settings,
+  });
+  if (!run.ok) return { ok: false, message: `Linear를 살펴보는 에이전트 실패(${run.reason}): ${run.detail}`, run };
+  if (!isScopes(run.output)) return { ok: false, message: 'Linear를 살펴본 결과의 형식이 다릅니다.', run };
+  return { ok: true, scopes: run.output, run };
 };

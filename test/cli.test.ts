@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -768,4 +768,62 @@ test('status는 요구사항별 비용을 함께 보여 준다', () => {
 test('호출 기록이 없으면 cost는 그렇다고 알린다', () => {
   const root = workspace({ 'A-1.md': req('A-1') });
   assert.match(run(root, 'cost').stdout, /호출 기록이 없습니다/);
+});
+
+// ── audit ──
+
+/** 스펙이 확정된 요구사항 둘. 스펙 계약에 서로 어긋나는 문장을 넣는다 */
+const auditProject = () => {
+  const root = workspace({ 'A-1.md': req('A-1'), 'B-1.md': req('B-1') });
+  run(root, 'sync');
+  for (const [id, contract] of [['A-1', '- 요소의 필드는 `id`, `title` 둘이다.'], ['B-1', '- 요소의 필드는 `id`, `title`, `done`이다.']]) {
+    writeSpec(root, { id, title: id, priority: 'P1', depends: [], policies: [], design: null, deprecated: false, body: 'b', hash: stateOf(root, id).reqHash }, { ...sampleSpec, contract });
+    writeState(root, apply(stateOf(root, id), 'draftSpec', 'spec', { specHash: specHash(root, id)! }, at));
+    run(root, 'approve', id);
+  }
+  return root;
+};
+const auditOut = (findings: object[]) => claudeOut({ findings });
+const fieldFinding = {
+  kind: 'contradiction', requirements: ['A-1', 'B-1'], fixIn: 'A-1', summary: '목록 요소의 필드가 다르다',
+  evidence: [{ id: 'A-1', quote: '요소의 필드는 `id`, `title` 둘이다.' }, { id: 'B-1', quote: '요소의 필드는 `id`, `title`, `done`이다.' }],
+  suggestion: 'A-1을 B-1에 맞춘다',
+};
+
+test('tick audit: 지적을 고칠 요구사항에 질문으로 붙이고, status와 show에서 보인다', () => {
+  const root = auditProject();
+  const r = runEnv(root, fakeByPrompt(root, 'claude', [{ marker: '', stdout: auditOut([fieldFinding]) }]), 'tick', 'audit');
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /audit.*지적 1건.*A-1/s);
+  assert.match(run(root, 'status').stdout, /A-1.*specified.*질문 대기 Q\d+\(audit\)/);
+  assert.match(run(root, 'show', 'A-1').stdout, /교차 모순: 목록 요소의 필드가 다르다/);
+  assert.deepEqual([lastRun(root).node, lastRun(root).id, lastRun(root).outcome], ['audit', null, 'findings']);
+});
+
+test('tick audit: 스펙이 그대로면 두 번째에는 에이전트를 부르지 않는다', () => {
+  const root = auditProject();
+  const env = fakeByPrompt(root, 'claude', [{ marker: '', stdout: auditOut([]) }]);
+  assert.match(runEnv(root, env, 'tick', 'audit').stdout, /지적할 것이 없습니다/);
+  assert.match(runEnv(root, env, 'tick', 'audit').stdout, /바뀐 스펙이 없습니다/);
+  assert.equal(readFileSync(join(root, '.fake-bin', 'claude.calls'), 'utf8').trim().split('\n').length, 1);
+});
+
+test('audit의 지적을 respec으로 받아들이면 stale이 되고, 지적 내용이 다음 스펙 작성의 근거가 된다', () => {
+  const root = auditProject();
+  runEnv(root, fakeByPrompt(root, 'claude', [{ marker: '', stdout: auditOut([fieldFinding]) }]), 'tick', 'audit');
+  assert.equal(run(root, 'respec', 'A-1', '지적대로 고친다').status, 0);
+  const s = stateOf(root, 'A-1');
+  assert.equal(s.status, 'stale');
+  assert.match(s.feedback.at(-1)!.message, /목록 요소의 필드가 다르다/);
+  assert.match(run(root, 'next', 'spec').stdout, /A-1/);
+});
+
+test('audit의 지적에 문제 아님으로 답하면, 같은 지적은 스펙이 바뀌지 않는 한 다시 오지 않는다', () => {
+  const root = auditProject();
+  runEnv(root, fakeByPrompt(root, 'claude', [{ marker: '', stdout: auditOut([fieldFinding]) }]), 'tick', 'audit');
+  run(root, 'answer', 'A-1', '의도한 확장이다');
+  rmSync(join(root, '.fsd', 'audit'), { recursive: true });
+  const r = runEnv(root, fakeByPrompt(root, 'claude', [{ marker: '', stdout: auditOut([fieldFinding]) }]), 'tick', 'audit');
+  assert.match(r.stdout, /이미 물었거나 사람이 판단한 지적 1건/);
+  assert.deepEqual(stateOf(root, 'A-1').holds, []);
 });

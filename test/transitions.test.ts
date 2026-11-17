@@ -147,3 +147,12 @@ test('respec의 사유는 다음 스펙 작성자가 읽도록 피드백으로 �
   const s = apply(specified(), 'respec', 'human', { reason: 'audit 모순' }, at);
   assert.deepEqual(s.feedback.at(-1), { message: 'audit 모순', specHash: 'spec-h1', at, about: 'spec' });
 });
+
+test('respec하면 열려 있던 audit의 지적도 다음 스펙 작성자가 읽도록 함께 남는다', () => {
+  const asked = apply(specified(), 'ask', 'audit', { question: '[audit:contradiction:A,B] 교차 모순: 필드가 다르다' }, at);
+  const s = apply(asked, 'respec', 'human', { reason: 'audit 지적대로 고친다' }, at);
+  assert.deepEqual(s.holds, []);
+  const message = s.feedback.at(-1)!.message;
+  assert.match(message, /audit 지적대로 고친다/);
+  assert.match(message, /교차 모순: 필드가 다르다/);
+});

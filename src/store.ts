@@ -17,7 +17,7 @@ export const paths = (root: string) => ({
   config: join(root, 'fsd.config.json'),
 });
 
-export type Role = 'spec-writer' | 'designer' | 'dev' | 'dev-backend' | 'dev-frontend' | 'qa' | 'linear-reader';
+export type Role = 'spec-writer' | 'designer' | 'dev' | 'dev-backend' | 'dev-frontend' | 'qa' | 'auditor' | 'linear-reader';
 export type RoleSetting = Readonly<{ agent: string; model?: string }>;
 
 export type Settings = Config & Readonly<{
@@ -44,6 +44,7 @@ const DEFAULT_CONFIG: Settings = {
     'dev-backend': { agent: 'claude' },
     'dev-frontend': { agent: 'claude' },
     qa: { agent: 'claude' },
+    auditor: { agent: 'claude' },
     // 옮겨 적기와 살펴보기는 판단이 필요 없는 일이라 작은 모델을 쓴다.
     'linear-reader': { agent: 'claude', model: 'claude-haiku-5-5' },
   },

@@ -220,10 +220,12 @@ const RULES: { [N in TransitionName]: Rule<Inputs[N]> } = {
   },
   respec: {
     from: POST_SPEC, to: 'stale', actors: ['human'],
-    effect: ({ state, input, at }) => ({
-      holds: [],
-      feedback: [...state.feedback, { message: input.reason, specHash: state.approvedSpecHash, at, about: 'spec' as const }],
-    }),
+    // 열려 있던 audit의 지적은 사람의 사유와 함께 남긴다. 다음 스펙 작성자가 무엇을 고쳐야 하는지 알 수 있게.
+    effect: ({ state, input, at }) => {
+      const findings = state.holds.filter(h => h.raisedBy === 'audit').map(h => h.message);
+      const message = [input.reason, ...findings.map(f => `(audit의 지적)\n${f}`)].join('\n\n');
+      return { holds: [], feedback: [...state.feedback, { message, specHash: state.approvedSpecHash, at, about: 'spec' as const }] };
+    },
     message: ({ input }) => `스펙 재확정 결정: ${input.reason}`,
   },
 };

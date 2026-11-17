@@ -16,6 +16,7 @@ import type { CostLine, CostSummary } from './cost.ts';
 import { escalate, flagsOf } from './flags.ts';
 import type { Flags } from './flags.ts';
 import { tickDesign } from './nodes/design.ts';
+import { tickAudit } from './nodes/audit.ts';
 import { tickDev } from './nodes/dev.ts';
 import { tickVerify } from './nodes/verify.ts';
 import { readQaPlan, renderQaPlan } from './qa.ts';
@@ -42,7 +43,7 @@ const USAGE = `사용법: fsd <명령>
   cost [--json]              에이전트 호출 비용: 전체, 요구사항별, 노드별, 에이전트별
   show <ID>                  요구사항 하나의 상태, 질문, 스펙 초안
   next <spec|design|dev|verify>  노드가 다음에 고를 후보 (실행하지 않음)
-  tick <spec|design|dev|verify> [--agent 이름]  노드를 한 사이클 실행 (claude | codex)
+  tick <spec|design|dev|verify|audit> [--agent 이름]  노드를 한 사이클 실행 (claude | codex)
   answer <ID> <답> [Q번호]   열린 질문에 답한다
   approve <ID> [--ui|--ux]   승인 대기 중인 초안(스펙 또는 디자인)을 확정한다. 디자인은 관점별로 승인할 수 있다
   reject <ID> <사유> [--ui|--ux]  승인 대기 중인 초안을 반려한다. 디자인은 어느 관점의 지적인지 밝힐 수 있다
@@ -299,11 +300,25 @@ const runVerify = async (ctx: Ctx, config: Settings, args: string[]): Promise<Ti
   return { result };
 };
 
+const runAudit = async (ctx: Ctx, config: Settings, args: string[]): Promise<Ticked> => {
+  const role = config.roles.auditor;
+  const policyIds = [...new Set(ctx.docs.flatMap(d => d.policies))];
+  const result = await tickAudit({
+    root: ctx.root, docs: ctx.docs, states: ctx.states, at: ctx.at,
+    agent: agentFor(option(args, '--agent') ?? role.agent),
+    settings: { ...config.agent, ...(role.model ? { model: role.model } : {}) },
+    skill: loadSkill(ctx.root, 'audit'),
+    policies: Object.fromEntries(policyIds.map(id => [id, readFileSync(policyFile(ctx.root, id), 'utf8')])),
+  });
+  return { result };
+};
+
 const TICKS: Readonly<Record<string, (ctx: Ctx, config: Settings, args: string[]) => Promise<Ticked>>> = {
   spec: runSpec,
   design: runDesign,
   dev: runDev,
   verify: runVerify,
+  audit: runAudit,
 };
 
 const tick = async (ctx: Ctx, config: Settings, args: string[]) => {
@@ -319,9 +334,13 @@ const tick = async (ctx: Ctx, config: Settings, args: string[]) => {
     saveRun(ctx.root, ctx.at, { node: part === 'full' ? node : `${node}-${part}`, id: result.id, agent, model, outcome: result.outcome, usage, ...extra });
   });
   if (result.state) saveState(ctx.root, result.state);
+  result.states?.forEach(s => saveState(ctx.root, s));
 
   switch (result.outcome) {
     case 'idle': return console.log(result.message);
+    case 'findings':
+      return console.log(`${node} → ${result.message}\n\n읽기: fsd show <ID>   고치기: fsd respec <ID> "<사유>"   문제 아님: fsd answer <ID> "<이유>"`);
+    case 'clean': return console.log(`${node} → ${result.message}`);
     case 'question': return console.log(`${node} → ${result.id} 질문 대기\n${result.message}\n\n답하기: fsd answer ${result.id} "<답>"`);
     case 'implemented': return console.log(`${node} → ${result.id} 구현 완료\n${result.message}`);
     case 'verified': return console.log(`${node} → ${result.id} 검증 완료\n${result.message}`);

@@ -385,6 +385,7 @@ const main = async (argv: string[]) => {
   const root = resolve(process.env.FSD_ROOT ?? process.cwd());
   const at = new Date().toISOString();
 
+  if (['help', '--help', '-h'].includes(command)) return console.log(USAGE);
   if (command === 'init') return init(root, at, args);
   // 설정이 아직 없고 사람이 직접 실행했으면, 먼저 한 번 묻는다. 자동 실행(터미널이 아님)에서는 묻지 않고 기본값으로 간다.
   if (!existsSync(paths(root).config) && process.stdin.isTTY && process.stdout.isTTY) await init(root, at, []);

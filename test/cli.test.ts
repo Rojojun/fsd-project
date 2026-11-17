@@ -700,3 +700,14 @@ test('status는 버그를 구현 중일 때만 보여 준다', () => {
   assert.equal(stateOf(root, 'A-1').status, 'implemented');
   assert.doesNotMatch(run(root, 'status').stdout, /버그/);
 });
+
+test('help는 어느 폴더에서든 사용법만 보여 주고, 아무것도 묻거나 만들지 않는다', () => {
+  for (const flag of ['help', '--help', '-h']) {
+    const root = emptyProject();
+    const r = run(root, flag);
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /사용법: fsd/);
+    assert.match(r.stdout, /tick/);
+    assert.deepEqual(readdirSync(root), []);
+  }
+});

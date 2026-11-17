@@ -26,11 +26,16 @@ export type SpecTickInput = Readonly<{
 export type TickResult = Readonly<{
   id: string | null;
   /** returned: 이전 단계로 되돌렸다 */
-  outcome: 'idle' | 'question' | 'drafted' | 'returned' | 'invalid-output' | 'agent-failed';
+  outcome:
+    | 'idle' | 'question' | 'drafted' | 'returned' | 'invalid-output' | 'agent-failed'
+    /** implemented: 구현 완료. verified: E2E 통과. failed: E2E 실패(버그 기록) */
+    | 'implemented' | 'verified' | 'failed';
   message: string;
   /** 바뀐 상태. 없으면 아무것도 바뀌지 않았다. */
   state?: RequirementState;
   run?: AgentResult;
+  /** 에이전트를 여럿 부른 사이클의 호출들 */
+  runs?: readonly Readonly<{ part: string; run: AgentResult }>[];
 }>;
 
 export const section = (title: string, body: string) => (body.trim() ? `# ${title}\n\n${body.trim()}` : '');

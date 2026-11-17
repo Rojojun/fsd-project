@@ -6,7 +6,7 @@ import { claudeAgent } from './agents/claude.ts';
 import { codexAgent } from './agents/codex.ts';
 import type { Agent } from './agents/types.ts';
 import { loadCatalog } from './catalog.ts';
-import { chooseSurface, designHash, readDesign, renderDesign } from './design.ts';
+import { appendLanguageRules, chooseSurface, designHash, missingLanguage, readDesign, readDesignLanguage, renderDesign } from './design.ts';
 import { escalate, flagsOf } from './flags.ts';
 import type { Flags } from './flags.ts';
 import { tickDesign } from './nodes/design.ts';
@@ -19,7 +19,8 @@ import { loadConfig, loadStates, paths, saveRun, saveState } from './store.ts';
 import type { Settings } from './store.ts';
 import { sync } from './sync.ts';
 import { apply, TransitionError } from './transitions.ts';
-import type { Hold, RequirementDoc, RequirementState } from './model.ts';
+import { ASPECTS } from './model.ts';
+import type { Aspect, Hold, RequirementDoc, RequirementState } from './model.ts';
 
 class UsageError extends Error {}
 
@@ -30,11 +31,24 @@ const USAGE = `사용법: agdd <명령>
   next <spec|design|dev|verify>  노드가 다음에 고를 후보 (실행하지 않음)
   tick <spec|design> [--agent 이름]  노드를 한 사이클 실행 (claude | codex)
   answer <ID> <답> [Q번호]   열린 질문에 답한다
-  approve <ID>               승인 대기 중인 초안(스펙 또는 디자인)을 확정한다
-  reject <ID> <사유>         승인 대기 중인 초안을 반려한다
+  approve <ID> [--ui|--ux]   승인 대기 중인 초안(스펙 또는 디자인)을 확정한다. 디자인은 관점별로 승인할 수 있다
+  reject <ID> <사유> [--ui|--ux]  승인 대기 중인 초안을 반려한다. 디자인은 어느 관점의 지적인지 밝힐 수 있다
   respec <ID> <사유>         확정된 스펙을 다시 연다`;
 
-type Ctx = Readonly<{ root: string; docs: readonly RequirementDoc[]; states: readonly RequirementState[]; at: string }>;
+type Ctx = Readonly<{
+  root: string;
+  docs: readonly RequirementDoc[];
+  states: readonly RequirementState[];
+  at: string;
+  /** --로 시작하는 인자 */
+  flags: readonly string[];
+}>;
+
+/** --ui / --ux: 디자인 검토의 관점 */
+const aspectOf = (flags: readonly string[]): { aspect?: Aspect } => {
+  const aspect = ASPECTS.find(a => flags.includes(`--${a}`));
+  return aspect ? { aspect } : {};
+};
 
 const holdLabel = (h: Hold) =>
   h.kind === 'question' ? `질문 대기 ${h.id}(${h.raisedBy}): ${h.message}` : `승인 대기 ${h.id}(${h.raisedBy})`;
@@ -47,6 +61,8 @@ const table = (rows: string[][]) => {
   return rows.map(r => r.map((c, i) => c.padEnd(widths[i])).join('  ').trimEnd()).join('\n');
 };
 
+const REVIEW_LABEL = { none: '', pending: '대기', approved: '승인', rejected: '반려' } as const;
+
 const phaseLabel = (f: Flags) => {
   const facts = [
     f.blockedBy.join(', '),
@@ -54,6 +70,7 @@ const phaseLabel = (f: Flags) => {
     f.reworks > 0 && `재작업 ${f.reworks}`,
     f.sameFailureStreak > 1 && `같은 실패 ${f.sameFailureStreak}`,
     f.staleReason,
+    f.review && ASPECTS.filter(a => f.review![a] !== 'none').map(a => `${a.toUpperCase()} ${REVIEW_LABEL[f.review![a]]}`).join(' · '),
   ].filter(Boolean);
   return facts.length ? `${f.phase}(${facts.join(' · ')})` : f.phase;
 };
@@ -104,13 +121,13 @@ const humanCommands: Record<string, (ctx: Ctx, args: string[]) => RequirementSta
     // 지금 디스크에 있는 초안을 승인한다. 초안 제출 뒤 파일이 바뀌었으면 해시가 달라 거부된다.
     const s = find(ctx, id);
     if (s.holds.some(h => h.kind === 'approval' && h.raisedBy === 'design')) {
-      return apply(s, 'approveDesign', 'human', { designHash: designHash(ctx.root, s.id) ?? '' }, ctx.at);
+      return apply(s, 'approveDesign', 'human', { designHash: designHash(ctx.root, s.id) ?? '', ...aspectOf(ctx.flags) }, ctx.at);
     }
     // 디자인 필요 여부: 사람이 요구사항 머리말에 못박았으면 그 값, 아니면 spec 노드의 판단.
     const needsDesign = ctx.docs.find(d => d.id === s.id)?.design ?? readSpec(ctx.root, s.id)?.design?.needed ?? false;
     return apply(s, 'approveSpec', 'human', { specHash: specHash(ctx.root, s.id) ?? '', needsDesign }, ctx.at);
   },
-  reject: (ctx, [id, reason]) => apply(find(ctx, id), 'reject', 'human', { reason: need(reason, '사유') }, ctx.at),
+  reject: (ctx, [id, reason]) => apply(find(ctx, id), 'reject', 'human', { reason: need(reason, '사유'), ...aspectOf(ctx.flags) }, ctx.at),
   respec: (ctx, [id, reason]) => apply(find(ctx, id), 'respec', 'human', { reason: need(reason, '사유') }, ctx.at),
 };
 
@@ -163,6 +180,7 @@ const runSpec = async (ctx: Ctx, config: Settings, args: string[]): Promise<Tick
     agent: agentFor(option(args, '--agent') ?? role.agent),
     settings: { ...config.agent, ...(role.model ? { model: role.model } : {}) },
     skill: loadSkill(ctx.root, 'spec-writer'),
+    designLanguageReady: missingLanguage(readDesignLanguage(ctx.root)).length === 0,
     policies: Object.fromEntries(policyIds.map(id => [id, readFileSync(policyFile(ctx.root, id), 'utf8')])),
   });
   return { result };
@@ -173,6 +191,16 @@ const runDesign = async (ctx: Ctx, config: Settings, args: string[]): Promise<Ti
   const pick = pickNext('design', ctx.docs, ctx.states, config);
   if (pick.id === null) return { result: { id: null, outcome: 'idle', message: pick.reason } };
 
+  // 디자인 언어가 없으면 노드가 spec으로 되돌린다. 그때는 도구 확인도 필요 없다.
+  const language = readDesignLanguage(ctx.root);
+  if (missingLanguage(language).length) {
+    const result = await tickDesign({
+      root: ctx.root, docs: ctx.docs, states: ctx.states, config, at: ctx.at, language,
+      agent: () => { throw new Error('디자인 언어가 없을 때는 에이전트를 부르지 않는다'); },
+      surface: 'html', server: null, settings: config.agent, skill: '', surfaceGuide: '',
+    });
+    return { result };
+  }
   const role = config.roles.designer;
   const roleAgent = option(args, '--agent') ?? role.agent;
   agentFor(roleAgent);
@@ -186,6 +214,7 @@ const runDesign = async (ctx: Ctx, config: Settings, args: string[]): Promise<Ti
     settings: { ...config.agent, ...(role.model && choice.agent === role.agent ? { model: role.model } : {}) },
     skill: loadSkill(ctx.root, 'designer'),
     surfaceGuide: loadSkill(ctx.root, `design-${choice.surface}`),
+    language,
   });
   return { result, extra: { surface: choice.surface } };
 };
@@ -210,6 +239,7 @@ const tick = async (ctx: Ctx, config: Settings, args: string[]) => {
   switch (result.outcome) {
     case 'idle': return console.log(result.message);
     case 'question': return console.log(`${node} → ${result.id} 질문 대기\n${result.message}\n\n답하기: agdd answer ${result.id} "<답>"`);
+    case 'returned': return console.log(`${node} → ${result.id} 이전 단계로 되돌림\n${result.message}`);
     case 'drafted': return console.log(`${node} → ${result.id} 승인 대기\n${result.message}\n\n읽기: agdd show ${result.id}   승인: agdd approve ${result.id}`);
     default: throw new UsageError(`${node} → ${result.id}: ${result.message}`);
   }
@@ -242,11 +272,12 @@ const main = async (argv: string[]) => {
   const log = args.includes('--json') ? console.error : console.log;
   synced.changes.forEach(c => log(`sync: ${c.id} ${c.transition}`));
   escalated.changes.forEach(c => log(`escalate: ${c.id} 반복 한도 → 질문 대기`));
-  const ctx: Ctx = { root, docs: catalog.docs, states: escalated.states, at };
+  const ctx: Ctx = { root, docs: catalog.docs, states: escalated.states, at, flags: args.filter(a => a.startsWith('--')) };
+  const positional = args.filter(a => !a.startsWith('--'));
 
   if (command === 'status') return console.log(args.includes('--json') ? statusJson(ctx) : status(ctx));
   if (command === 'sync') return synced.changes.length || console.log('sync: 변경 없음');
-  if (command === 'show') return console.log(show(ctx, args[0]));
+  if (command === 'show') return console.log(show(ctx, positional[0]));
   if (command === 'tick') return tick(ctx, config, args);
   if (command === 'next') {
     const node = args[0];
@@ -256,9 +287,15 @@ const main = async (argv: string[]) => {
   }
   const human = humanCommands[command];
   if (!human) throw new UsageError(USAGE);
-  const next = human(ctx, args);
+  const next = human(ctx, positional);
   saveState(root, next);
   console.log(`${next.id}: ${next.history.at(-1)!.message} → ${next.status}`);
+
+  // 디자인이 확정되면, 검토에서 명문화된 일반 규칙을 디자인 언어 문서에 쌓는다. 다음 디자인부터 기준이 된다.
+  if (next.history.at(-1)!.transition === 'approveDesign' && next.status === 'designed') {
+    const added = appendLanguageRules(root, next.id, readDesign(root, next.id)?.codified ?? []);
+    if (added) console.log(`디자인 언어에 규칙 ${added}개를 추가했습니다 (design/ui.md, design/ux.md).`);
+  }
 };
 
 main(process.argv.slice(2)).catch((e: unknown) => {

@@ -16,6 +16,8 @@ export type SpecTickInput = Readonly<{
   settings: AgentSettings;
   /** 스펙 작성 규칙 문서(skills/spec-writer.md)의 내용 */
   skill: string;
+  /** 디자인 언어(design/ui.md, design/ux.md)가 정해져 있는가 */
+  designLanguageReady: boolean;
   /** 정책 ID → 정책 원문 */
   policies: Readonly<Record<string, string>>;
   at: string;
@@ -23,7 +25,8 @@ export type SpecTickInput = Readonly<{
 
 export type TickResult = Readonly<{
   id: string | null;
-  outcome: 'idle' | 'question' | 'drafted' | 'invalid-output' | 'agent-failed';
+  /** returned: 이전 단계로 되돌렸다 */
+  outcome: 'idle' | 'question' | 'drafted' | 'returned' | 'invalid-output' | 'agent-failed';
   message: string;
   /** 바뀐 상태. 없으면 아무것도 바뀌지 않았다. */
   state?: RequirementState;
@@ -44,7 +47,8 @@ const buildPrompt = (input: SpecTickInput, doc: RequirementDoc, state: Requireme
     section('요구사항', `ID: ${doc.id}\n제목: ${doc.title}\n우선순위: ${doc.priority}\n\n${doc.body}`),
     section('근거 정책', doc.policies.map(id => `## ${id}\n\n${policies[id]}`).join('\n\n')),
     section('사람이 이미 내린 결정', state.decisions.map(d => `- 질문: ${d.question}\n  답: ${d.answer}`).join('\n')),
-    section('이전 스펙에 대한 사람의 지적 (모두 반영한다)', state.feedback.map(f => `- ${f.message}`).join('\n')),
+    section('이전 스펙에 대한 사람의 지적 (모두 반영한다)', state.feedback.filter(f => f.about !== 'design').map(f => `- ${f.message}`).join('\n')),
+    section('디자인 언어', input.designLanguageReady ? '`design/ui.md`와 `design/ux.md`에 정해져 있다. 디자인 언어에 대해서는 묻지 않는다.' : ''),
     section('선행 요구사항의 확정 스펙', dependencies.join('\n\n')),
     section('이전 스펙 (요구사항이 바뀌어 다시 확정해야 한다)', previous ? renderSpec(previous) : ''),
   ].filter(Boolean).join('\n\n---\n\n');
@@ -83,6 +87,13 @@ export const tickSpec = async (input: SpecTickInput): Promise<TickResult> => {
   }
   if (checked.kind === 'question') {
     const question = joinQuestions(checked.questions);
+    return { ...result, outcome: 'question', message: question, state: apply(state, 'ask', 'spec', { question }, at) };
+  }
+  // 디자인이 필요한데 디자인 언어가 없으면 스펙을 확정해도 디자인 단계에서 되돌아온다. 여기서 먼저 묻는다.
+  if ((doc.design ?? checked.spec.design.needed) && !input.designLanguageReady) {
+    const question = '이 요구사항은 화면 디자인이 필요한데 디자인 언어가 정해져 있지 않습니다. '
+      + '`design/ui.md`(UI 기준)와 `design/ux.md`(UX 기준)를 작성한 뒤 "작성했다"고 답해 주세요. '
+      + '디자인이 필요 없다면 요구사항 머리말에 `design: false`를 적어 주세요.';
     return { ...result, outcome: 'question', message: question, state: apply(state, 'ask', 'spec', { question }, at) };
   }
   // 초안을 저장소에 쓰고, 그 내용의 해시에 승인을 묶는다.

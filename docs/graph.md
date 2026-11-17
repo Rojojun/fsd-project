@@ -8,7 +8,8 @@
 | 노드 | 종류 | 하는 일 |
 |---|---|---|
 | sync | 코드 | 요구사항 파일의 지문을 비교해 등록·변경·폐기를 반영한다. 모든 명령 실행 전에 돈다. |
-| spec | AI + 코드 | 요구사항을 API 계약·인수 조건·E2E로 확정할 초안을 만든다. |
+| spec | AI + 코드 | 요구사항을 API 계약·인수 조건·E2E로 확정할 초안을 만든다. 디자인이 필요한지도 함께 판단한다. |
+| design | AI + 코드 | 디자인이 필요한 요구사항의 화면을 그린다. 필요 없는 요구사항은 건너뛴다. |
 | dev | AI + 코드 | 확정 스펙을 구현한다. |
 | verify | 코드 (+AI 버그 리포트) | E2E를 실행해 통과하면 승격, 실패하면 버그를 기록한다. |
 | audit | AI + 코드 | 확정 스펙 전체의 교차 모순을 찾아 사람에게 묻는다. |
@@ -21,7 +22,8 @@
 | 상태 | 이름 | 의미 |
 |---|---|---|
 | `cataloged` | 등록됨 | 요구사항은 있고 승인된 스펙은 없다. |
-| `specified` | 스펙 확정 | 사람이 승인한 스펙이 있다. dev의 후보다. |
+| `specified` | 스펙 확정 | 사람이 승인한 스펙이 있다. 디자인이 필요 없으면 dev의, 필요하면 design의 후보다. |
+| `designed` | 디자인 확정 | 사람이 두 관점(UI, UX)에서 모두 승인한 디자인이 있다. dev의 후보다. |
 | `in-dev` | 구현 중 | dev가 착수했거나 버그를 재작업하는 중이다. |
 | `implemented` | 구현 완료 | verify를 기다린다. |
 | `verified` | 검증 완료 | E2E를 통과했다. |
@@ -35,9 +37,10 @@
 | 종류 | 이름 | 붙이는 쪽 | 푸는 쪽 |
 |---|---|---|---|
 | `question` | 질문 대기 | 모든 노드 | 사람 `answer` |
-| `approval` | 승인 대기 | spec (초안 제출) | 사람 `approve` / `reject` |
+| `approval` | 승인 대기 | spec, design (초안 제출) | 사람 `approve` / `reject` |
 
 승인 대기는 초안의 해시에 묶인다. 초안이 바뀌면 이전 승인은 쓸 수 없다.
+디자인 초안은 승인 대기가 관점별로 둘 붙는다(`ui`, `ux`). `approve --ui`, `approve --ux`로 따로 푼다.
 
 ## 전이 규칙
 
@@ -47,26 +50,30 @@
 |---|---|---|---|---|
 | register | sync | (없음) | cataloged | 새 요구사항 파일 |
 | reset | sync | cataloged, stale | 유지 | 파일 변경. 초안과 hold를 버린다. |
-| invalidate | sync | specified, in-dev, implemented, verified | stale | 파일 변경. hold와 버그를 버린다. |
+| invalidate | sync | specified, designed, in-dev, implemented, verified | stale | 파일 변경. hold와 버그를 버린다. |
 | deprecate | sync | deprecated 외 전부 | deprecated | 파일 삭제 또는 `deprecated: true`. hold를 버린다. |
 | revive | sync | deprecated | cataloged | 파일 복원 |
 | draftSpec | spec | cataloged, stale | 유지 | 승인 대기 hold 추가 (초안 해시) |
 | ask | spec, dev, verify, audit | deprecated 외 전부 | 유지 | 질문 대기 hold 추가 |
 | answer | 사람 | 질문 대기가 있는 상태 | 유지 | 질문 hold 제거, 결정 기록 추가 |
-| approveSpec | 사람 | cataloged, stale + 승인 대기 | specified | 초안 해시 일치 시. 승인 스펙 해시 기록 |
-| reject | 사람 | 승인 대기가 있는 상태 | 유지 | 승인 hold 제거, 피드백 기록 |
-| startDev | dev | specified | in-dev | |
-| finishDev | dev | in-dev | implemented | 구현 기준 스펙 해시 = 승인 스펙 해시 (Spec Gate) |
+| approveSpec | 사람 | cataloged, stale + 승인 대기 | specified | 초안 해시 일치 시. 승인 스펙 해시와 디자인 필요 여부를 기록. 이전 디자인 승인은 지운다 |
+| draftDesign | design | specified (디자인 필요) | 유지 | UI, UX 두 관점의 승인 대기 추가 (디자인 해시) |
+| approveDesign | 사람 | specified + 디자인 승인 대기 | 유지 또는 designed | 디자인 해시 일치 시. 한 관점만 승인하면 유지, 두 관점이 모두 승인되면 designed |
+| returnToSpec | design | specified | stale | 디자인 언어가 정해지지 않아 그릴 수 없을 때. 이유를 스펙에 대한 지적으로 기록 |
+| reject | 사람 | 승인 대기가 있는 상태 | 유지 | 승인 hold를 모두 제거, 지적 기록. 디자인이면 어느 관점의 지적인지도 기록. 한 관점의 반려라도 초안 전체를 다시 만든다 |
+| startDev | dev | specified (디자인 불필요), designed | in-dev | |
+| finishDev | dev | in-dev | implemented | 구현 기준 스펙 해시 = 승인 스펙 해시 (Spec Gate). 승인된 디자인이 있으면 디자인 해시도 같아야 한다 (Design Gate) |
 | passVerify | verify | implemented | verified | 버그 기록 제거 |
 | failVerify | verify | implemented | in-dev | 버그 증거 기록 |
-| respec | 사람 | specified, in-dev, implemented, verified | stale | 사람이 스펙 수정을 결정 (audit 질문의 답 등). 사유를 피드백으로 기록 |
+| respec | 사람 | specified, designed, in-dev, implemented, verified | stale | 사람이 스펙 수정을 결정 (audit 질문의 답 등). 사유를 피드백으로 기록 |
 
 ## 후보 선택
 
 | 노드 | 후보 | 순서 | 제외 |
 |---|---|---|---|
 | spec | cataloged, stale | 우선순위(P0→P2), ID | hold 있음, 선행 요구사항이 specified 이전, 승인 대기 수 ≥ WIP 한도 |
-| dev | in-dev(버그) → in-dev → specified | 같은 그룹 안에서는 우선순위, ID | hold 있음 |
+| design | specified 가운데 디자인이 필요한 것 | 우선순위, ID | hold 있음, 승인 대기 수 ≥ WIP 한도 |
+| dev | in-dev(버그) → in-dev → designed와 디자인이 필요 없는 specified | 같은 그룹 안에서는 우선순위, ID | hold 있음 |
 | verify | implemented | 우선순위, ID | hold 있음 |
 
 ## 플래그
@@ -84,19 +91,20 @@
 | `waiting-answer` | 사람의 답을 기다린다 | 전부 |
 | `waiting-approval` | 사람의 승인을 기다린다 | cataloged, stale |
 | `blocked-by-dependency` | 선행 요구사항의 스펙이 확정되지 않았다 | cataloged, stale |
-| `redraft` | 초안이 반려되어 다시 써야 한다 | cataloged, stale |
+| `redraft` | 초안이 반려되어 다시 써야 한다 | cataloged, stale, specified(디자인) |
 | `building` | 처음 구현하는 중이다 | in-dev |
 | `rework` | E2E 실패로 되돌아와 고치는 중이다 | in-dev |
 | `done` | 끝났다 | verified |
-| `ready` | 담당 노드가 집어 갈 수 있다 | cataloged, stale, specified, implemented |
+| `ready` | 담당 노드가 집어 갈 수 있다 | cataloged, stale, specified, designed, implemented |
 
 ### 사실 값
 
 | 플래그 | 의미 | 다시 0부터 세는 때 |
 |---|---|---|
 | `blockedBy` | 막고 있는 선행 요구사항 ID | |
-| `staleReason` | `requirement-changed`(파일 변경) / `respec`(사람 결정) | |
-| `rejections` | 스펙 초안 반려 횟수 | 요구사항 변경, respec, 사람의 답 |
+| `staleReason` | `requirement-changed`(파일 변경) / `respec`(사람 결정) / `design-returned`(디자인 언어가 없어 design이 되돌림) | |
+| `review` | 디자인 검토의 관점별 상태 `{ ui, ux }`. 값은 `none`(초안 없음) / `pending` / `approved` / `rejected`. 디자인이 필요 없으면 없다 | |
+| `rejections` | 지금 단계의 초안(스펙 또는 디자인) 반려 횟수 | 요구사항 변경, respec, 사람의 답, 스펙 승인 |
 | `reworks` | E2E 실패로 되돌아온 횟수 | 스펙 승인, 사람의 답 |
 | `sameFailureStreak` | 같은 증거로 연속 실패한 횟수 | 스펙 승인, 사람의 답 |
 | `waitingSince` | 가장 오래된 대기가 시작된 시각 | |
@@ -108,7 +116,7 @@ sync 직후에 코드가 검사한다. 한도에 닿으면 질문 대기를 붙�
 
 | 조건 | 기본 한도 | 묻는 쪽 |
 |---|---|---|
-| `rejections` | 3 | spec |
+| `rejections` | 3 | spec (스펙 초안), design (디자인 초안) |
 | `sameFailureStreak` | 2 | dev |
 | `reworks` | 3 | dev |
 
@@ -138,3 +146,56 @@ sync 직후에 코드가 검사한다. 한도에 닿으면 질문 대기를 붙�
 
 마지막 줄의 한계: 스펙과 E2E를 같은 쪽이 쓰면 오해가 담긴 코드도 통과한다. 규칙은 근거가 있는지는 검사해도 근거를 제대로 이해했는지는 검사하지 못한다.
 그래서 스펙 승인은 사람이 하고, 스펙 초안은 사람이 읽기 쉬워야 한다.
+
+## 디자인 단계
+
+### 디자인이 필요한가
+
+spec 노드가 스펙을 쓰면서 판단하고(`spec.design.needed`와 이유), 사람이 스펙과 함께 승인한다.
+요구사항 머리말에 `design: true` 또는 `design: false`를 적으면 그 값이 우선한다.
+필요 없는 요구사항은 design 노드가 고르지 않는다. 에이전트도 부르지 않는다.
+
+### 어디에 그리는가
+
+design 노드가 실행될 때마다 연결된 도구를 확인해서, 아래 순서에서 가장 앞에 있는 것을 쓴다.
+
+1. Penpot MCP 서버가 연결되어 있으면 Penpot
+2. 아니면 Figma MCP 서버가 연결되어 있으면 Figma
+3. 둘 다 없으면 Claude가 단일 HTML 파일(`designs/<ID>/index.html`)로 그린다. 역할의 에이전트가 codex여도 이 경우에는 claude를 부른다.
+
+연결 여부는 역할의 에이전트 쪽을 먼저 보고, 없으면 claude 쪽을 본다. 인증이 안 된 서버는 연결된 것으로 치지 않는다.
+HTML 파일은 Claude 아티팩트로 그대로 올릴 수 있게 쓴다. 헤드리스 실행에는 아티팩트 게시 도구가 없어서, 올리는 일은 대화형 세션에서 한다.
+
+### 디자인 언어
+
+디자인의 기준은 사람이 관리하는 두 문서다. 두 검토 관점의 기준점이기도 하다.
+
+| 문서 | 관점 | 정하는 것 |
+|---|---|---|
+| `design/ui.md` | UI | 보이는 것: 색, 글꼴, 간격, 컴포넌트, 문구의 어조 |
+| `design/ux.md` | UX | 쓰는 흐름: 화면 전환, 상태(비어 있음·불러오는 중·오류), 피드백, 접근성 |
+
+둘 중 하나라도 없거나 제목만 있으면 디자인 언어가 정해지지 않은 것이다. design 노드는 디자인 언어를 지어내서 그리지 않는다.
+
+- spec 노드는 디자인이 필요한 스펙을 쓰게 됐는데 디자인 언어가 없으면, 초안을 내지 않고 사람에게 묻는다.
+- 그래도 디자인 언어 없이 design 단계까지 오면, design 노드는 에이전트를 부르지 않고 `returnToSpec`으로 spec 단계에 되돌린다.
+
+### 두 관점의 검토
+
+디자인 초안은 UI와 UX 두 관점의 승인을 따로 받는다. 한 사람이 둘 다 해도 되고 나눠 맡아도 된다.
+
+```
+agdd approve <ID> --ui        UI 관점 승인
+agdd approve <ID> --ux        UX 관점 승인        (둘 다 승인되면 designed)
+agdd approve <ID>             두 관점을 한 번에 승인
+agdd reject <ID> "<지적>" --ux   UX 관점의 지적으로 반려
+```
+
+### 지적의 명문화
+
+사람의 지적은 반려 사유로 오거나, 디자인 도구에 그려진 디자인의 댓글로 온다. 흔히 느낌으로 적혀 있다.
+design 노드는 지적 하나하나를 지켰는지 가릴 수 있는 규칙으로 바꿔 적고(`codified`: 관점, 원문, 규칙, 적용 범위), 그 규칙대로 다시 그린다.
+코드는 지적마다 명문화한 규칙이 있는지, 원문을 되풀이한 것은 아닌지 검사한다. 통과하지 못한 초안은 제출되지 않는다.
+
+적용 범위가 `language`인 규칙은 그 디자인이 두 관점에서 모두 승인될 때 `design/ui.md` 또는 `design/ux.md`의 "검토에서 정해진 규칙" 아래에 쌓인다.
+출처(요구사항 ID)와 지적 원문이 함께 남는다. 다음 디자인부터 이 규칙이 기준이 된다. 사람이 규칙을 읽고 승인한 뒤에만 쌓인다.

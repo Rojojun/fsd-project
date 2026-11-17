@@ -8,6 +8,7 @@ import type { RequirementState } from './model.ts';
 export const paths = (root: string) => ({
   requirements: join(root, 'requirements'),
   policies: join(root, 'policies'),
+  design: join(root, 'design'),
   skills: join(root, 'skills'),
   runs: join(root, '.agdd', 'runs'),
   state: join(root, '.agdd', 'state'),

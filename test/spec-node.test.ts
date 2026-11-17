@@ -35,6 +35,7 @@ const setup = (docs: RequirementDoc[], states: RequirementState[], policies: Rec
   root: mkdtempSync(join(tmpdir(), 'agdd-node-')),
   docs, states, policies, at,
   skill: 'SKILL-RULES',
+  designLanguageReady: true,
   config: { wip: { spec: 3, design: 3 } },
   settings: { timeoutMs: 5000, maxTurns: 9 },
 });
@@ -132,4 +133,35 @@ test('에이전트가 질문에 직접 번호를 붙여도 번호가 두 번 붙
   const { agent } = fakeAgent({ output: { status: 'question', questions: ['1) 첫째?', '2. 둘째?', '(3) 셋째?'], spec: null } });
   const r = await tickSpec({ ...setup([doc('A')], [register('A', 'req-h', at)]), agent });
   assert.equal(r.state!.holds[0].message, '1) 첫째?\n2) 둘째?\n3) 셋째?');
+});
+
+test('디자인이 필요한데 디자인 언어가 정해져 있지 않으면 초안을 내지 않고 사람에게 묻는다', async () => {
+  const needsDesign = { ...spec(), design: { needed: true, reason: '화면이 생긴다' } };
+  const { agent } = fakeAgent({ output: { status: 'done', questions: [], spec: needsDesign } });
+  const input = setup([doc('A')], [register('A', 'req-h', at)]);
+  const r = await tickSpec({ ...input, agent, designLanguageReady: false });
+  assert.equal(r.outcome, 'question');
+  assert.match(r.state!.holds[0].message, /design\/ui\.md.*design\/ux\.md/s);
+  assert.equal(readSpec(input.root, 'A'), null);
+
+  const ready = await tickSpec({ ...input, agent, designLanguageReady: true });
+  assert.equal(ready.outcome, 'drafted');
+});
+
+test('요구사항 머리말이 design: false면 디자인 언어가 없어도 초안을 낸다', async () => {
+  const needsDesign = { ...spec(), design: { needed: true, reason: '화면이 생긴다' } };
+  const { agent } = fakeAgent({ output: { status: 'done', questions: [], spec: needsDesign } });
+  const r = await tickSpec({ ...setup([doc('A', { design: false })], [register('A', 'req-h', at)]), agent, designLanguageReady: false });
+  assert.equal(r.outcome, 'drafted');
+});
+
+test('디자인에 대한 지적은 스펙 작성자에게 넘기지 않는다', async () => {
+  const { agent, tasks } = fakeAgent({ output: { status: 'question', questions: ['Q'], spec: null } });
+  const state = { ...register('A', 'req-h', at), feedback: [
+    { message: '여백이 좁다', specHash: 'd', at, about: 'design' as const },
+    { message: '빈 목록 조건이 없음', specHash: 's', at, about: 'spec' as const },
+  ] };
+  await tickSpec({ ...setup([doc('A')], [state]), agent });
+  assert.ok(!tasks[0].prompt.includes('여백이 좁다'));
+  assert.ok(tasks[0].prompt.includes('빈 목록 조건이 없음'));
 });

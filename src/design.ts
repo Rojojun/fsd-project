@@ -1,7 +1,9 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { execProcess } from './agents/exec.ts';
+import { ASPECTS } from './model.ts';
 import { dirHash } from './spec.ts';
+import type { Aspect } from './model.ts';
 import type { Exec } from './agents/types.ts';
 import type { SavedSpec } from './spec.ts';
 
@@ -56,7 +58,12 @@ export const chooseSurface = async (roleAgent: string, exec: Exec = execProcess)
 };
 
 export type Screen = Readonly<{ name: string; description: string; covers: readonly string[] }>;
-export type Design = Readonly<{ summary: string; location: string; screens: readonly Screen[] }>;
+/**
+ * 사람의 지적을 검사할 수 있는 규칙으로 옮긴 것.
+ * scope가 language면 이 디자인에만 해당하지 않는 일반 규칙이다. 디자인이 승인되면 디자인 언어 문서에 쌓인다.
+ */
+export type Codified = Readonly<{ aspect: Aspect; source: string; rule: string; scope: 'design' | 'language' }>;
+export type Design = Readonly<{ summary: string; location: string; screens: readonly Screen[]; codified: readonly Codified[] }>;
 /** 저장된 디자인 요약. 어디에 그렸는지, 어느 스펙을 보고 그렸는지 함께 남긴다. */
 export type SavedDesign = Design & Readonly<{ surface: Surface; specHash: string }>;
 
@@ -79,6 +86,15 @@ export const DESIGN_OUTPUT_SCHEMA = strict({
         summary: text,
         location: text,
         screens: { type: 'array', items: strict({ name: text, description: text, covers: { type: 'array', items: text } }) },
+        codified: {
+          type: 'array',
+          items: strict({
+            aspect: { type: 'string', enum: [...ASPECTS] },
+            source: text,
+            rule: text,
+            scope: { type: 'string', enum: ['design', 'language'] },
+          }),
+        },
       }),
     ],
   },
@@ -105,10 +121,26 @@ const locationErrors = (design: Record<string, unknown>, surface: Surface, root:
   return /^\s*<(!doctype html|html)/i.test(readFileSync(file, 'utf8')) ? [] : [`${htmlPath(id)}이(가) HTML 문서가 아닙니다.`];
 };
 
+const squash = (v: unknown) => String(v).replace(/[\s.]/g, '');
+
+/** 지적마다 명문화한 규칙이 있는지, 규칙이 제대로 된 규칙인지 검사한다. */
+const codifiedErrors = (codified: readonly Record<string, unknown>[], feedback: readonly string[]): string[] => [
+  ...codified.flatMap((c, i) => [
+    ...((ASPECTS as readonly unknown[]).includes(c.aspect) ? [] : [`명문화 ${i + 1}번의 aspect는 ${ASPECTS.join(' 또는 ')}여야 합니다.`]),
+    ...(filled(c.source) ? [] : [`명문화 ${i + 1}번의 source(지적 원문)가 비어 있습니다.`]),
+    ...(filled(c.rule) ? [] : [`명문화 ${i + 1}번의 rule이 비어 있습니다.`]),
+    ...(c.scope === 'design' || c.scope === 'language' ? [] : [`명문화 ${i + 1}번의 scope는 design 또는 language여야 합니다.`]),
+    ...(filled(c.rule) && squash(c.rule) === squash(c.source) ? [`명문화 ${i + 1}번은 지적 원문을 되풀이했습니다. 검사할 수 있는 규칙으로 바꿔 적어야 합니다.`] : []),
+  ]),
+  ...feedback
+    .filter(f => !codified.some(c => squash(c.source) === squash(f)))
+    .map(f => `지적 "${f}"을(를) 명문화한 규칙이 없습니다.`),
+];
+
 /** 디자인 에이전트 출력을 코드로 검사한다. 어느 도구로 그렸든 같은 기준이다. */
 export const checkDesignOutput = (
   output: unknown,
-  { spec, surface, root }: Readonly<{ spec: SavedSpec; surface: Surface; root: string }>,
+  { spec, surface, root, feedback }: Readonly<{ spec: SavedSpec; surface: Surface; root: string; feedback: readonly string[] }>,
 ): DesignCheck => {
   if (!isObject(output)) return { ok: false, errors: ['출력 형식이 객체가 아닙니다.'] };
   const questions = Array.isArray(output.questions) ? output.questions.filter(filled) : [];
@@ -120,6 +152,7 @@ export const checkDesignOutput = (
   if (!isObject(design)) return { ok: false, errors: ['완료(done)에는 design이 필요합니다.'] };
 
   const screens = Array.isArray(design.screens) ? design.screens.filter(isObject) : [];
+  const codified = Array.isArray(design.codified) ? design.codified.filter(isObject) : [];
   const known = new Set(spec.acceptance.map(a => a.id));
   const cited = screens.flatMap(s => (Array.isArray(s.covers) ? s.covers.map(String) : []));
   const errors = [
@@ -130,6 +163,7 @@ export const checkDesignOutput = (
       (['name', 'description'] as const).filter(k => !filled(s[k])).map(k => `화면 ${i + 1}번의 ${k}이(가) 비어 있습니다.`)),
     ...[...new Set(cited)].filter(id => !known.has(id)).map(id => `스펙에 없는 인수 조건 ${id}을(를) 다뤘다고 했습니다.`),
     ...locationErrors(design, surface, root, spec.id),
+    ...codifiedErrors(codified, feedback),
   ];
   if (errors.length) return { ok: false, errors };
   return {
@@ -139,6 +173,7 @@ export const checkDesignOutput = (
       summary: design.summary as string,
       location: surface === 'html' ? htmlPath(spec.id) : (design.location as string),
       screens: screens as unknown as Screen[],
+      codified: codified as unknown as Codified[],
     },
   };
 };
@@ -166,4 +201,42 @@ export const renderDesign = (design: SavedDesign): string =>
     `### 화면\n\n${design.screens
       .map(s => `- **${s.name}**: ${s.description}${s.covers.length ? ` (다루는 인수 조건: ${s.covers.join(', ')})` : ''}`)
       .join('\n')}`,
-  ].join('\n\n');
+    (design.codified ?? []).length
+      ? `### 지적을 명문화한 규칙\n\n${design.codified
+          .map(c => `- [${c.aspect.toUpperCase()}] "${c.source}" → ${c.rule} (${c.scope === 'language' ? '승인되면 디자인 언어에 추가' : '이 디자인에만 적용'})`)
+          .join('\n')}`
+      : '',
+  ].filter(Boolean).join('\n\n');
+
+/** 디자인 언어: 사람이 관리하는 두 문서. 두 검토 관점의 기준점이다. */
+export const languageFile = (aspect: Aspect) => `design/${aspect}.md`;
+export type DesignLanguage = Readonly<Record<Aspect, string | null>>;
+
+export const readDesignLanguage = (root: string): DesignLanguage =>
+  Object.fromEntries(
+    ASPECTS.map(aspect => {
+      const file = join(root, languageFile(aspect));
+      const body = existsSync(file) ? readFileSync(file, 'utf8') : '';
+      // 제목 줄만 있는 문서는 아무것도 정하지 않은 것이다.
+      const hasRules = body.split('\n').some(line => line.trim() !== '' && !line.trim().startsWith('#'));
+      return [aspect, hasRules ? body : null];
+    }),
+  ) as DesignLanguage;
+
+/** 정해지지 않은 디자인 언어 문서의 경로 */
+export const missingLanguage = (language: DesignLanguage): string[] =>
+  ASPECTS.filter(aspect => language[aspect] === null).map(languageFile);
+
+const RULES_HEADING = '## 검토에서 정해진 규칙';
+
+/** 승인된 디자인의 일반 규칙을 관점에 맞는 디자인 언어 문서에 쌓는다. 쌓은 개수를 돌려준다. */
+export const appendLanguageRules = (root: string, id: string, codified: readonly Codified[]): number =>
+  codified.filter(c => c.scope === 'language').filter(c => {
+    const file = join(root, languageFile(c.aspect));
+    const body = existsSync(file) ? readFileSync(file, 'utf8') : '';
+    if (body.includes(c.rule)) return false;
+    mkdirSync(join(root, 'design'), { recursive: true });
+    const heading = body.includes(RULES_HEADING) ? '' : `${body.endsWith('\n') || body === '' ? '' : '\n'}\n${RULES_HEADING}\n\n`;
+    appendFileSync(file, `${heading}- ${c.rule} (출처: ${id}, 원문: "${c.source}")\n`);
+    return true;
+  }).length;

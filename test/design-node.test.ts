@@ -21,7 +21,7 @@ const spec = {
 };
 const output = (location = 'ignored') => ({
   status: 'done', questions: [],
-  design: { summary: '목록 화면 디자인', location, screens: [{ name: '목록', description: '빈 상태 포함', covers: ['AC-1'] }] },
+  design: { summary: '목록 화면 디자인', location, screens: [{ name: '목록', description: '빈 상태 포함', covers: ['AC-1'] }], codified: [] as object[] },
 });
 /** 스펙이 승인되어 디자인을 기다리는 작업 폴더 */
 const setup = (prepare: (s: RequirementState) => RequirementState = s => s) => {
@@ -36,6 +36,7 @@ const setup = (prepare: (s: RequirementState) => RequirementState = s => s) => {
     settings: { timeoutMs: 5000, maxTurns: 9 },
     skill: 'DESIGN-RULES',
     surfaceGuide: 'SURFACE-GUIDE',
+    language: { ui: 'UI-LANGUAGE', ux: 'UX-LANGUAGE' } as { ui: string | null; ux: string | null },
   };
 };
 const fakeAgent = (result: { output: unknown } | { reason: 'timeout'; detail: string }, sideEffect: (task: AgentTask) => void = () => {}) => {
@@ -111,11 +112,41 @@ test('에이전트가 실패하면 상태를 바꾸지 않는다', async () => {
 });
 
 test('프롬프트는 규칙, 도구 안내, 요구사항, 확정 스펙, 지난 반려 사유, 저장할 자리를 담는다', async () => {
-  const { agent, tasks } = fakeAgent({ output: output() }, writesHtml);
+  const codified = [{ aspect: 'ui', source: '여백이 좁다', rule: '목록 줄의 위아래 여백은 12px 이상으로 한다', scope: 'language' }];
+  const { agent, tasks } = fakeAgent({ output: { ...output(), design: { ...output().design, codified } } }, writesHtml);
   const rejectedOnce = (s: RequirementState) =>
-    apply(apply(s, 'draftDesign', 'design', { designHash: 'd0' }, at), 'reject', 'human', { reason: '여백이 좁다' }, at);
-  await tickDesign({ ...setup(rejectedOnce), agent, ...html });
-  for (const piece of ['DESIGN-RULES', 'SURFACE-GUIDE', '목록을 화면에 보여 준다', '빈 목록 안내가 보인다', 'AC-1', '여백이 좁다', 'designs/A/index.html']) {
+    apply(apply(s, 'draftDesign', 'design', { designHash: 'd0' }, at), 'reject', 'human', { reason: '여백이 좁다', aspect: 'ui' }, at);
+  const r = await tickDesign({ ...setup(rejectedOnce), agent, ...html });
+  assert.equal(r.outcome, 'drafted', r.message);
+  for (const piece of ['DESIGN-RULES', 'SURFACE-GUIDE', 'UI-LANGUAGE', 'UX-LANGUAGE', '목록을 화면에 보여 준다', '빈 목록 안내가 보인다', 'AC-1', '[UI] 여백이 좁다', 'designs/A/index.html']) {
     assert.ok(tasks[0].prompt.includes(piece), `프롬프트에 "${piece}"이(가) 없습니다`);
   }
+});
+
+test('디자인 언어가 정해져 있지 않으면 에이전트를 부르지 않고 spec 단계로 되돌린다', async () => {
+  const { agent, tasks } = fakeAgent({ output: output() }, writesHtml);
+  const r = await tickDesign({ ...setup(), agent, ...html, language: { ui: 'UI-LANGUAGE', ux: null } });
+  assert.equal(r.outcome, 'returned');
+  assert.equal(tasks.length, 0);
+  assert.equal(r.state!.status, 'stale');
+  assert.match(r.state!.feedback.at(-1)!.message, /design\/ux\.md/);
+  assert.equal(r.state!.feedback.at(-1)!.about, 'spec');
+});
+
+test('사람의 지적을 명문화하지 않은 디자인은 통과하지 못한다', async () => {
+  const { agent } = fakeAgent({ output: output() }, writesHtml);
+  const rejectedOnce = (s: RequirementState) =>
+    apply(apply(s, 'draftDesign', 'design', { designHash: 'd0' }, at), 'reject', 'human', { reason: '답답해 보인다' }, at);
+  const r = await tickDesign({ ...setup(rejectedOnce), agent, ...html });
+  assert.equal(r.outcome, 'invalid-output');
+  assert.match(r.message, /답답해 보인다/);
+});
+
+test('스펙에 대한 예전 지적은 디자이너에게 넘기지 않는다', async () => {
+  const { agent, tasks } = fakeAgent({ output: output() }, writesHtml);
+  const input = setup();
+  const withSpecFeedback = { ...input.states[0], feedback: [{ message: '스펙의 빈 목록 조건 누락', specHash: 's', at, about: 'spec' as const }] };
+  const r = await tickDesign({ ...input, states: [withSpecFeedback], agent, ...html });
+  assert.equal(r.outcome, 'drafted', r.message);
+  assert.ok(!tasks[0].prompt.includes('스펙의 빈 목록 조건 누락'));
 });

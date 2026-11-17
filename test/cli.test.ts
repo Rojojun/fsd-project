@@ -274,11 +274,14 @@ const draftedUi = (frontExtra = '') => {
   run(root, 'sync');
   writeSpec(root, { id: 'A-1', title: 'A-1', priority: 'P1', depends: [], policies: [], design: null, deprecated: false, body: 'b', hash: stateOf(root, 'A-1').reqHash }, uiSpec);
   writeState(root, apply(stateOf(root, 'A-1'), 'draftSpec', 'spec', { specHash: specHash(root, 'A-1')! }, at));
+  mkdirSync(join(root, 'design'));
+  writeFileSync(join(root, 'design', 'ui.md'), '# UI 기준\n\n- 색은 변수로 정한다\n');
+  writeFileSync(join(root, 'design', 'ux.md'), '# UX 기준\n\n- 빈 상태를 빠뜨리지 않는다\n');
   return root;
 };
-const designOut = (location: string) => ({
+const designOut = (location: string, codified: object[] = []) => ({
   status: 'done', questions: [],
-  design: { summary: '목록 화면 디자인', location, screens: [{ name: '목록', description: '빈 상태 포함', covers: ['AC-1'] }] },
+  design: { summary: '목록 화면 디자인', location, screens: [{ name: '목록', description: '빈 상태 포함', covers: ['AC-1'] }], codified },
 });
 /**
  * `mcp list`에는 서버 목록을, 그 밖의 호출에는 정해진 결과를 내는 가짜 에이전트.
@@ -398,4 +401,67 @@ test('디자인 초안 제출 뒤 디자인 파일이 바뀌면 approve를 거�
   assert.equal(r.status, 1);
   assert.match(r.stderr, /해시/);
   assert.equal(stateOf(root, 'A-1').status, 'specified');
+});
+
+// ── 디자인 언어, 두 관점의 검토, 지적의 명문화 ──
+
+const htmlDesigner = (root: string, codified: object[] = []) =>
+  fakeDesigner(root, 'claude', { stdout: claudeOut(designOut('x', codified)), drawsHtml: true });
+
+test('tick design: 디자인 언어 문서가 없으면 그리지 않고 spec 단계로 되돌린다', () => {
+  const root = draftedUi();
+  run(root, 'approve', 'A-1');
+  writeFileSync(join(root, 'design', 'ux.md'), '# UX 기준\n');
+  const env = htmlDesigner(root);
+  const r = runEnv(root, env, 'tick', 'design');
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /되돌림.*design\/ux\.md/s);
+  assert.equal(stateOf(root, 'A-1').status, 'stale');
+  assert.equal(existsSync(join(root, '.fake-bin', 'claude.args')), false, '에이전트를 부르면 안 된다');
+  assert.match(run(root, 'status').stdout, /stale.*design-returned/);
+  assert.match(run(root, 'next', 'spec').stdout, /A-1/);
+});
+
+test('디자인 검토는 --ui와 --ux로 따로 승인하고, 둘 다 승인되어야 designed가 된다', () => {
+  const root = draftedUi();
+  run(root, 'approve', 'A-1');
+  runEnv(root, htmlDesigner(root), 'tick', 'design');
+  assert.match(run(root, 'status').stdout, /UI 대기.*UX 대기/);
+
+  assert.equal(run(root, 'approve', 'A-1', '--ui').status, 0);
+  assert.equal(stateOf(root, 'A-1').status, 'specified');
+  assert.match(run(root, 'status').stdout, /UI 승인.*UX 대기/);
+  assert.match(run(root, 'next', 'dev').stdout, /후보가 없습니다/);
+
+  assert.equal(run(root, 'approve', 'A-1', '--ux').status, 0);
+  assert.equal(stateOf(root, 'A-1').status, 'designed');
+});
+
+test('reject --ux는 UX 관점의 지적으로 남고, status에 어느 관점에서 반려됐는지 보인다', () => {
+  const root = draftedUi();
+  run(root, 'approve', 'A-1');
+  runEnv(root, htmlDesigner(root), 'tick', 'design');
+  const r = run(root, 'reject', 'A-1', '끝났는지 모르겠다', '--ux');
+  assert.equal(r.status, 0, r.stderr);
+  const last = stateOf(root, 'A-1').feedback.at(-1)!;
+  assert.deepEqual([last.message, last.about, last.aspect], ['끝났는지 모르겠다', 'design', 'ux']);
+  assert.match(run(root, 'status').stdout, /redraft.*UX 반려/);
+});
+
+test('디자인이 승인되면 명문화된 일반 규칙이 디자인 언어 문서에 쌓인다', () => {
+  const root = draftedUi();
+  run(root, 'approve', 'A-1');
+  runEnv(root, htmlDesigner(root), 'tick', 'design');
+  run(root, 'reject', 'A-1', '답답해 보인다', '--ui');
+  const codified = [{ aspect: 'ui', source: '답답해 보인다', rule: '목록 줄 사이 간격은 12px 이상으로 한다', scope: 'language' }];
+  const again = runEnv(root, htmlDesigner(root, codified), 'tick', 'design');
+  assert.equal(again.status, 0, again.stderr);
+  assert.match(run(root, 'show', 'A-1').stdout, /답답해 보인다.*목록 줄 사이 간격은 12px 이상/s);
+  assert.doesNotMatch(readFileSync(join(root, 'design', 'ui.md'), 'utf8'), /12px/, '승인 전에는 쌓이지 않는다');
+
+  run(root, 'approve', 'A-1', '--ui');
+  const r = run(root, 'approve', 'A-1', '--ux');
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /디자인 언어.*1/s);
+  assert.match(readFileSync(join(root, 'design', 'ui.md'), 'utf8'), /목록 줄 사이 간격은 12px 이상으로 한다 \(출처: A-1/);
 });

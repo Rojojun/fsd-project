@@ -29,8 +29,14 @@ node src/cli.ts status
 | `src/nodes/spec.ts` | spec 노드의 한 사이클 |
 | `src/design.ts` | 디자인 도구 선택, 디자인 언어, 출력 검사, 지적의 명문화 |
 | `src/nodes/design.ts` | design 노드의 한 사이클 |
+| `src/nodes/dev.ts` | dev 노드의 한 사이클. 디자인이 있으면 백엔드·프론트엔드 병렬 |
+| `src/qa.ts`, `src/nodes/verify.ts` | QA 검사 계획의 대조, E2E 실행 |
+| `src/notes.ts` | 실행 사이의 인계 메모 |
 | `skills/spec-writer.md` | 스펙 작성 규칙. 어느 모델에나 같은 문서를 준다 |
 | `skills/designer.md`, `skills/design-<도구>.md` | 디자인 규칙과 도구별 그리는 법 |
+| `skills/dev.md`, `skills/dev-backend.md`, `skills/dev-frontend.md` | 구현 규칙과 나눠 구현할 때의 범위 |
+| `skills/qa.md` | QA 규칙: 무엇을 어디서 검사할지 뽑는 법 |
+| `e2e/<ID>/` | QA가 쓴 검사 계획과 E2E 테스트. dev는 고칠 수 없다 |
 | `design/ui.md`, `design/ux.md` | 디자인 언어. 사람이 관리한다. 디자인이 필요한 요구사항이 있으면 먼저 써야 한다 |
 | `designs/<ID>/` | 디자인. 승인은 이 폴더의 해시에 묶인다 |
 | `specs/<ID>/` | 스펙. 승인은 이 폴더의 해시에 묶인다 |
@@ -45,7 +51,7 @@ agdd status [--json]            요구사항별 상태, 세부 단계, 대기 �
 agdd sync                       요구사항 파일 변경만 반영
 agdd show <ID>                  요구사항 하나의 상태, 질문, 스펙 초안
 agdd next <spec|design|dev|verify>      노드가 다음에 고를 후보 (실행하지 않음)
-agdd tick <spec|design> [--agent 이름]  노드를 한 사이클 실행 (claude | codex)
+agdd tick <spec|design|dev|verify> [--agent 이름]  노드를 한 사이클 실행 (claude | codex)
 agdd answer <ID> <답> [Q번호]   열린 질문에 답한다
 agdd approve <ID> [--ui|--ux]   승인 대기 중인 초안(스펙 또는 디자인)을 확정한다
 agdd reject <ID> <사유> [--ui|--ux]  승인 대기 중인 초안을 반려한다
@@ -64,20 +70,25 @@ agdd respec <ID> <사유>         확정된 스펙을 다시 연다
 
 ```json
 {
-  "roles": { "spec-writer": { "agent": "claude" }, "designer": { "agent": "claude" } },
+  "roles": {
+    "spec-writer": { "agent": "claude" }, "designer": { "agent": "claude" },
+    "dev": { "agent": "claude" }, "qa": { "agent": "claude" }
+  },
   "agent": { "timeoutMs": 600000, "maxTurns": 30 },
+  "verify": { "command": null, "timeoutMs": 600000 },
   "wip": { "spec": 3, "design": 3 },
   "limits": { "rejections": 3, "reworks": 3, "sameFailure": 2 }
 }
 ```
 
-`roles`의 항목에 `"model"`을 주면 그 모델로 실행한다.
+`roles`의 항목에 `"model"`을 주면 그 모델로 실행한다. `dev-backend`, `dev-frontend`를 따로 적지 않으면 `dev`의 설정을 따른다.
+`verify.command`는 대상 프로젝트의 E2E 실행 명령이다. 정하지 않으면 `tick verify`는 돌지 않는다.
 
 ## 진행 상황
 
 - [x] 1단계: 상태·전이 규칙·sync·후보 선택·사람 명령 (AI 없음)
 - [x] 2단계: Agent 어댑터 (claude, codex)와 `agdd tick spec`
 - [x] 디자인 루프: `agdd tick design`, UI·UX 두 관점의 검토, 디자인 언어, 지적의 명문화
-- [ ] 3단계: `tick dev`, `tick verify`
+- [x] 3단계: `tick dev`(디자인이 있으면 백엔드·프론트엔드 병렬), `tick verify`(QA 검사 계획 + 설정된 E2E 명령)
 - [ ] 4단계: `tick audit`, 비용 집계
 - [ ] 5단계: 트리거(cron/CI)와 GitHub·GitLab 채널 어댑터

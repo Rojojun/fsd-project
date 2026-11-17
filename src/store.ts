@@ -15,7 +15,7 @@ export const paths = (root: string) => ({
   config: join(root, 'agdd.config.json'),
 });
 
-export type Role = 'spec-writer' | 'designer';
+export type Role = 'spec-writer' | 'designer' | 'dev' | 'dev-backend' | 'dev-frontend' | 'qa';
 export type RoleSetting = Readonly<{ agent: string; model?: string }>;
 
 export type Settings = Config & Readonly<{
@@ -24,13 +24,23 @@ export type Settings = Config & Readonly<{
   roles: Readonly<Record<Role, RoleSetting>>;
   /** 에이전트 호출 한 번의 한도 */
   agent: Readonly<{ timeoutMs: number; maxTurns: number }>;
+  /** 대상 프로젝트의 E2E 실행 명령. {id}는 요구사항 ID로 바뀐다. 정하지 않으면 verify를 돌릴 수 없다 */
+  verify: Readonly<{ command: string | null; timeoutMs: number }>;
 }>;
 
 const DEFAULT_CONFIG: Settings = {
   wip: { spec: 3, design: 3 },
   limits: { rejections: 3, reworks: 3, sameFailure: 2 },
-  roles: { 'spec-writer': { agent: 'claude' }, designer: { agent: 'claude' } },
+  roles: {
+    'spec-writer': { agent: 'claude' },
+    designer: { agent: 'claude' },
+    dev: { agent: 'claude' },
+    'dev-backend': { agent: 'claude' },
+    'dev-frontend': { agent: 'claude' },
+    qa: { agent: 'claude' },
+  },
   agent: { timeoutMs: 600_000, maxTurns: 30 },
+  verify: { command: null, timeoutMs: 600_000 },
 };
 
 export const loadConfig = (root: string): Settings => {
@@ -40,8 +50,14 @@ export const loadConfig = (root: string): Settings => {
   return {
     wip: { ...DEFAULT_CONFIG.wip, ...raw.wip },
     limits: { ...DEFAULT_CONFIG.limits, ...raw.limits },
-    roles: { ...DEFAULT_CONFIG.roles, ...raw.roles },
+    // 백엔드·프론트엔드 역할을 따로 정하지 않았으면 dev 역할의 설정을 따른다.
+    roles: {
+      ...DEFAULT_CONFIG.roles,
+      ...(raw.roles?.dev ? { 'dev-backend': raw.roles.dev, 'dev-frontend': raw.roles.dev } : {}),
+      ...raw.roles,
+    } as Settings['roles'],
     agent: { ...DEFAULT_CONFIG.agent, ...raw.agent },
+    verify: { ...DEFAULT_CONFIG.verify, ...raw.verify },
   };
 };
 

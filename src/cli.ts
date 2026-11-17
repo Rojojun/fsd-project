@@ -10,6 +10,9 @@ import { appendLanguageRules, chooseSurface, designHash, missingLanguage, readDe
 import { escalate, flagsOf } from './flags.ts';
 import type { Flags } from './flags.ts';
 import { tickDesign } from './nodes/design.ts';
+import { tickDev } from './nodes/dev.ts';
+import { tickVerify } from './nodes/verify.ts';
+import { readQaPlan, renderQaPlan } from './qa.ts';
 import { tickSpec } from './nodes/spec.ts';
 import type { TickResult } from './nodes/spec.ts';
 import { pickNext } from './select.ts';
@@ -29,7 +32,7 @@ const USAGE = `사용법: agdd <명령>
   sync                       요구사항 파일 변경만 반영
   show <ID>                  요구사항 하나의 상태, 질문, 스펙 초안
   next <spec|design|dev|verify>  노드가 다음에 고를 후보 (실행하지 않음)
-  tick <spec|design> [--agent 이름]  노드를 한 사이클 실행 (claude | codex)
+  tick <spec|design|dev|verify> [--agent 이름]  노드를 한 사이클 실행 (claude | codex)
   answer <ID> <답> [Q번호]   열린 질문에 답한다
   approve <ID> [--ui|--ux]   승인 대기 중인 초안(스펙 또는 디자인)을 확정한다. 디자인은 관점별로 승인할 수 있다
   reject <ID> <사유> [--ui|--ux]  승인 대기 중인 초안을 반려한다. 디자인은 어느 관점의 지적인지 밝힐 수 있다
@@ -153,6 +156,7 @@ const show = (ctx: Ctx, id: string | undefined) => {
   const design = readDesign(ctx.root, s.id);
   const dHash = designHash(ctx.root, s.id);
   const designTitle = dHash && dHash === s.approvedDesignHash ? '확정 디자인' : '디자인 초안 (미승인)';
+  const qaPlan = readQaPlan(ctx.root, s.id);
   return [
     `# ${s.id} ${doc?.title ?? ''}`,
     `상태: ${s.status} · ${phaseLabel(flagsOf(s, doc, ctx.states))}`,
@@ -161,6 +165,8 @@ const show = (ctx: Ctx, id: string | undefined) => {
     s.decisions.length ? `## 내린 결정\n\n${s.decisions.map(d => `- ${d.question}\n  → ${d.answer}`).join('\n')}` : '',
     spec ? `---\n${specTitle}\n\n${renderSpec(spec)}` : '',
     design ? `---\n${designTitle}\n\n${renderDesign(design)}` : '',
+    spec && qaPlan ? `---\n${renderQaPlan(qaPlan, spec, s.approvedDesignHash !== null ? design : null)}` : '',
+    s.bug ? `---\n## 고쳐야 할 버그\n\n${s.bug.evidence}` : '',
   ].filter(Boolean).join('\n\n');
 };
 
@@ -219,9 +225,47 @@ const runDesign = async (ctx: Ctx, config: Settings, args: string[]): Promise<Ti
   return { result, extra: { surface: choice.surface } };
 };
 
+const runDev = async (ctx: Ctx, config: Settings, args: string[]): Promise<Ticked> => {
+  const forced = option(args, '--agent');
+  const roleOf = { full: config.roles.dev, backend: config.roles['dev-backend'], frontend: config.roles['dev-frontend'] } as const;
+  const parts = ['full', 'backend', 'frontend'] as const;
+  const result = await tickDev({
+    root: ctx.root, docs: ctx.docs, states: ctx.states, config, at: ctx.at,
+    agents: Object.fromEntries(parts.map(p => [p, agentFor(forced ?? roleOf[p].agent)])) as Record<(typeof parts)[number], Agent>,
+    models: Object.fromEntries(parts.flatMap(p => (roleOf[p].model && !forced ? [[p, roleOf[p].model]] : []))),
+    settings: config.agent,
+    skill: loadSkill(ctx.root, 'dev'),
+    partGuides: { backend: loadSkill(ctx.root, 'dev-backend'), frontend: loadSkill(ctx.root, 'dev-frontend') },
+    language: readDesignLanguage(ctx.root),
+  });
+  return { result };
+};
+
+const runVerify = async (ctx: Ctx, config: Settings, args: string[]): Promise<Ticked> => {
+  if (!config.verify.command) {
+    throw new UsageError(
+      'E2E 실행 명령이 정해져 있지 않습니다. agdd.config.json에 대상 프로젝트의 테스트 명령을 적어 주세요.\n'
+      + '예: { "verify": { "command": "npm run e2e -- {id}" } }   ({id}는 요구사항 ID로 바뀝니다. 테스트는 e2e/<ID>/에 놓입니다.)',
+    );
+  }
+  const role = config.roles.qa;
+  const result = await tickVerify({
+    root: ctx.root, docs: ctx.docs, states: ctx.states, config, at: ctx.at,
+    agent: agentFor(option(args, '--agent') ?? role.agent),
+    settings: { ...config.agent, ...(role.model ? { model: role.model } : {}) },
+    skill: loadSkill(ctx.root, 'qa'),
+    language: readDesignLanguage(ctx.root),
+    command: config.verify.command,
+    commandTimeoutMs: config.verify.timeoutMs,
+  });
+  return { result };
+};
+
 const TICKS: Readonly<Record<string, (ctx: Ctx, config: Settings, args: string[]) => Promise<Ticked>>> = {
   spec: runSpec,
   design: runDesign,
+  dev: runDev,
+  verify: runVerify,
 };
 
 const tick = async (ctx: Ctx, config: Settings, args: string[]) => {
@@ -230,15 +274,20 @@ const tick = async (ctx: Ctx, config: Settings, args: string[]) => {
   if (!runNode) throw new UsageError(`tick은 ${Object.keys(TICKS).join(', ')}만 됩니다.\n\n${USAGE}`);
   const { result, extra } = await runNode(ctx, config, args);
 
-  if (result.run) {
-    const { agent, model, usage } = result.run;
-    saveRun(ctx.root, ctx.at, { node, id: result.id, agent, model, outcome: result.outcome, usage, ...extra });
-  }
+  // 에이전트 호출마다 기록을 남긴다. 나눠 실행한 사이클은 부분마다 하나씩.
+  const calls = result.runs ?? (result.run ? [{ part: 'full', run: result.run }] : []);
+  calls.forEach(({ part, run }) => {
+    const { agent, model, usage } = run;
+    saveRun(ctx.root, ctx.at, { node: part === 'full' ? node : `${node}-${part}`, id: result.id, agent, model, outcome: result.outcome, usage, ...extra });
+  });
   if (result.state) saveState(ctx.root, result.state);
 
   switch (result.outcome) {
     case 'idle': return console.log(result.message);
     case 'question': return console.log(`${node} → ${result.id} 질문 대기\n${result.message}\n\n답하기: agdd answer ${result.id} "<답>"`);
+    case 'implemented': return console.log(`${node} → ${result.id} 구현 완료\n${result.message}`);
+    case 'verified': return console.log(`${node} → ${result.id} 검증 완료\n${result.message}`);
+    case 'failed': return console.log(`${node} → ${result.id} E2E 실패 → dev로 되돌림\n${result.message}`);
     case 'returned': return console.log(`${node} → ${result.id} 이전 단계로 되돌림\n${result.message}`);
     case 'drafted': return console.log(`${node} → ${result.id} 승인 대기\n${result.message}\n\n읽기: agdd show ${result.id}   승인: agdd approve ${result.id}`);
     default: throw new UsageError(`${node} → ${result.id}: ${result.message}`);

@@ -465,3 +465,102 @@ test('디자인이 승인되면 명문화된 일반 규칙이 디자인 언어 �
   assert.match(r.stdout, /디자인 언어.*1/s);
   assert.match(readFileSync(join(root, 'design', 'ui.md'), 'utf8'), /목록 줄 사이 간격은 12px 이상으로 한다 \(출처: A-1/);
 });
+
+// ── dev, verify ──
+
+/** 프롬프트에 든 표시에 따라 다른 답을 내는 가짜 에이전트. before는 답하기 전에 작업 폴더에서 실행할 셸 명령. */
+const fakeByPrompt = (root: string, name: string, cases: { marker: string; stdout: string }[], before = '') => {
+  const bin = join(root, '.fake-bin');
+  mkdirSync(bin, { recursive: true });
+  cases.forEach((c, i) => writeFileSync(join(bin, `${name}.${i}.out`), c.stdout));
+  const branches = cases.map((c, i) => `  *${c.marker}*) echo ${i} >> "$d/${name}.calls"; cat "$d/${name}.${i}.out";;`).join('\n');
+  writeFileSync(join(bin, name), `#!/bin/sh\nd="$(dirname "$0")"\nif [ "$1" = "mcp" ]; then exit 0; fi\n${before}\ncase "$*" in\n${branches}\nesac\n`);
+  chmodSync(join(bin, name), 0o755);
+  return { ...process.env, PATH: `${bin}:${process.env.PATH}` };
+};
+const devOut = (files: string[], summary: string) => claudeOut({ status: 'done', questions: [], summary, files, notes: '' });
+/** 스펙이 확정된(디자인 불필요) 작업 폴더 */
+const specifiedApi = () => {
+  const root = workspace({ 'A-1.md': req('A-1') });
+  run(root, 'sync');
+  draft(root, 'A-1');
+  run(root, 'approve', 'A-1');
+  return root;
+};
+const qaOut = claudeOut({
+  status: 'done', questions: [],
+  plan: { summary: 'API 검사 계획', scenarios: [{ id: 'S-1', target: 'api', screen: '', covers: ['AC-1'], basis: 'acceptance', title: '결과 확인', steps: '요청한다', expected: '결과 문장', file: 'e2e/A-1/api.test.mjs' }] },
+});
+const WRITE_TEST = 'mkdir -p e2e/A-1 && echo "// AC-1" > e2e/A-1/api.test.mjs';
+const verifyConfig = (root: string, command: string) =>
+  writeFileSync(join(root, 'agdd.config.json'), JSON.stringify({ verify: { command } }));
+
+test('tick dev: 디자인이 없는 요구사항은 에이전트 하나가 구현하고 implemented가 된다', () => {
+  const root = specifiedApi();
+  const env = fakeByPrompt(root, 'claude', [{ marker: '', stdout: devOut(['app/tasks.mjs'], '목록 조회를 구현함') }]);
+  const r = runEnv(root, env, 'tick', 'dev');
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /A-1.*구현 완료.*목록 조회를 구현함/s);
+  assert.equal(stateOf(root, 'A-1').status, 'implemented');
+  assert.deepEqual([lastRun(root).node, lastRun(root).outcome], ['dev', 'implemented']);
+  assert.match(run(root, 'next', 'verify').stdout, /A-1/);
+});
+
+test('tick dev: 디자인이 있으면 백엔드와 프론트엔드 에이전트를 따로 부르고 호출 기록도 둘이다', () => {
+  const root = draftedUi();
+  run(root, 'approve', 'A-1');
+  runEnv(root, htmlDesigner(root), 'tick', 'design');
+  run(root, 'approve', 'A-1');
+  assert.equal(stateOf(root, 'A-1').status, 'designed');
+  mkdirSync(join(root, 'skills'));
+  for (const name of ['dev', 'dev-backend', 'dev-frontend']) writeFileSync(join(root, 'skills', `${name}.md`), `MARK-${name.toUpperCase()}`);
+
+  const env = fakeByPrompt(root, 'claude', [
+    { marker: 'MARK-DEV-FRONTEND', stdout: devOut(['web/list.html'], '화면을 구현함') },
+    { marker: 'MARK-DEV-BACKEND', stdout: devOut(['server/tasks.mjs'], 'API를 구현함') },
+  ]);
+  const r = runEnv(root, env, 'tick', 'dev');
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /백엔드.*API를 구현함/s);
+  assert.match(r.stdout, /프론트엔드.*화면을 구현함/s);
+  assert.equal(stateOf(root, 'A-1').status, 'implemented');
+  assert.deepEqual(readFileSync(join(root, '.fake-bin', 'claude.calls'), 'utf8').trim().split('\n').sort(), ['0', '1']);
+  const nodes = readdirSync(join(root, '.agdd', 'runs')).filter(f => f.includes('-dev-')).map(f => JSON.parse(readFileSync(join(root, '.agdd', 'runs', f), 'utf8')).node).sort();
+  assert.deepEqual(nodes, ['dev-backend', 'dev-frontend']);
+});
+
+test('tick verify: E2E 실행 명령이 설정에 없으면 안내하고 실패한다', () => {
+  const root = specifiedApi();
+  runEnv(root, fakeByPrompt(root, 'claude', [{ marker: '', stdout: devOut(['a'], 's') }]), 'tick', 'dev');
+  const r = run(root, 'tick', 'verify');
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /verify.*command/s);
+  assert.equal(stateOf(root, 'A-1').status, 'implemented');
+});
+
+test('tick verify: QA가 계획과 테스트를 쓰고 설정된 명령이 통과하면 verified가 된다', () => {
+  const root = specifiedApi();
+  runEnv(root, fakeByPrompt(root, 'claude', [{ marker: '', stdout: devOut(['a'], 's') }]), 'tick', 'dev');
+  verifyConfig(root, 'test -f e2e/{id}/api.test.mjs');
+  const r = runEnv(root, fakeByPrompt(root, 'claude', [{ marker: '', stdout: qaOut }], WRITE_TEST), 'tick', 'verify');
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /A-1.*검증 완료/s);
+  assert.equal(stateOf(root, 'A-1').status, 'verified');
+  const shown = run(root, 'show', 'A-1').stdout;
+  assert.match(shown, /검사 계획/);
+  assert.match(shown, /AC-1.*S-1/);
+});
+
+test('tick verify: 명령이 실패하면 증거와 함께 dev로 되돌리고, 다음 dev가 그 버그를 집는다', () => {
+  const root = specifiedApi();
+  runEnv(root, fakeByPrompt(root, 'claude', [{ marker: '', stdout: devOut(['a'], 's') }]), 'tick', 'dev');
+  verifyConfig(root, 'echo "not ok 1 - AC-1 빈 배열이 아님"; exit 1');
+  const r = runEnv(root, fakeByPrompt(root, 'claude', [{ marker: '', stdout: qaOut }], WRITE_TEST), 'tick', 'verify');
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /A-1.*E2E 실패.*not ok 1 - AC-1/s);
+  const s = stateOf(root, 'A-1');
+  assert.equal(s.status, 'in-dev');
+  assert.match(s.bug!.evidence, /not ok 1 - AC-1 빈 배열이 아님/);
+  assert.match(run(root, 'status').stdout, /in-dev.*rework/);
+  assert.match(run(root, 'next', 'dev').stdout, /A-1/);
+});

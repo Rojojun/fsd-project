@@ -12,10 +12,10 @@ fsd는 요구사항 하나하나를 스펙 → (디자인) → 구현 → 검증
 - fsd는 **대상 프로젝트의 폴더에서** 실행한다. 이 저장소의 예제는 `examples/meeting-report/`다.
 
 ```sh
-npm install                      # 이 저장소에서 한 번
+npm install && npm install -g .   # 이 저장소에서 한 번. fsd 명령이 생긴다
 cd examples/meeting-report
-npm install                      # 예제의 테스트 도구(Playwright)
-node ../../src/cli.ts status     # 아래에서는 이 명령을 fsd라고 줄여 쓴다
+npm install                       # 예제의 테스트 도구(Playwright)
+fsd status                        # 전역 설치를 하지 않았으면 node ../../src/cli.ts status
 ```
 
 처음 한 번 `fsd init`을 실행한다. 요구사항을 Linear에서 가져올지 묻고, 답을 `fsd.config.json`에 남긴다.
@@ -264,14 +264,19 @@ for node in spec design dev verify; do node ../../src/cli.ts tick $node; done
 
 ## 8. 비용 참고
 
-예제를 Claude(Fable 5.2)로 돌린 실측이다. 호출 한 번에 입력이 약 7만 토큰인데, 대부분은 에이전트 CLI의 기본 맥락이다.
+예제를 Claude(Fable 5.2, Opus 5.5)로 돌린 실측이다. 호출 한 번에 입력이 약 7만 토큰인데, 대부분은 에이전트 CLI의 기본 맥락이다.
 
 | 호출 | 비용 | 시간 |
 |---|---|---|
 | 스펙 초안 또는 질문 | $0.2 ~ $0.5 | 15 ~ 30초 |
-| 디자인 초안 (HTML) | $0.4 | 1분 안팎 |
+| 디자인 초안 (HTML) 또는 다시 그리기 | $0.2 ~ $0.5 | 1분 안팎 |
 | 구현 (API 하나) | $0.5 | 40초 |
-| 검사 계획 + E2E 작성 | $0.7 ~ $1.0 | 70 ~ 90초 |
+| 구현 (화면, 백엔드·프론트엔드 동시) | $1.3 (둘 합) | 3분 |
+| 검사 계획 + E2E 작성 (API) | $0.7 ~ $1.0 | 70 ~ 90초 |
+| 검사 계획 + E2E 작성 (화면) | $1.4 | 4분 |
+| 재검증 (계획이 이미 있음) | 에이전트 호출 없음 | 테스트 시간만 |
+
+화면 요구사항 하나를 스펙부터 검증까지 진행하는 데 약 $4가 들었다. Codex는 비용 대신 토큰만 남는다(구현 한 번에 입력 20만~38만, QA 한 번에 43만 토큰).
 | Linear 가져오기 (작은 모델) | $0.01 | 15초 |
 | Linear 살펴보기 (`fsd init`, 작은 모델) | $0.03 | 1분 반 |
 

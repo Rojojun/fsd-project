@@ -4,7 +4,26 @@
   "id": "UI-01",
   "status": "specified",
   "reqHash": "f5be3b9e7ad121e2a3bc07b727fd47592fbfc2cea0890c637a4c1f5f6be8e4e4",
-  "holds": [],
+  "holds": [
+    {
+      "id": "A3-ui",
+      "kind": "approval",
+      "raisedBy": "design",
+      "message": "디자인 초안 UI 검토 요청",
+      "at": "2026-11-17T07:44:37.833Z",
+      "artifactHash": "20f54904e53c7ada357b51a433af4171d1823c1a6d2482d34dc04850790a582b",
+      "aspect": "ui"
+    },
+    {
+      "id": "A3-ux",
+      "kind": "approval",
+      "raisedBy": "design",
+      "message": "디자인 초안 UX 검토 요청",
+      "at": "2026-11-17T07:44:37.833Z",
+      "artifactHash": "20f54904e53c7ada357b51a433af4171d1823c1a6d2482d34dc04850790a582b",
+      "aspect": "ux"
+    }
+  ],
   "approvedSpecHash": "82e7cd635df3b7a03fb5dec20e100033148f2fb985077ad25918107840f0dac7",
   "bug": null,
   "decisions": [],
@@ -33,6 +52,14 @@
       "actor": "human",
       "at": "2026-11-17T07:44:37.591Z",
       "message": "스펙 승인 (디자인 필요)"
+    },
+    {
+      "from": "specified",
+      "to": "specified",
+      "transition": "draftDesign",
+      "actor": "design",
+      "at": "2026-11-17T07:44:37.833Z",
+      "message": "디자인 초안 제출 → 승인 대기"
     }
   ]
 }

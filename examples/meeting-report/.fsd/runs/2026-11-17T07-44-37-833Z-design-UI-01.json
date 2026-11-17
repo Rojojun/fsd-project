@@ -1,0 +1,16 @@
+{
+  "at": "2026-11-17T07:44:37.833Z",
+  "node": "design",
+  "id": "UI-01",
+  "agent": "claude",
+  "model": "claude-opus-5-5",
+  "outcome": "drafted",
+  "usage": {
+    "costUsd": 0.4961564,
+    "inputTokens": 70244,
+    "outputTokens": 9028,
+    "turns": 3,
+    "durationMs": 69271
+  },
+  "surface": "html"
+}

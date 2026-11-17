@@ -69,8 +69,8 @@ test('번호를 적지 않으면 추천(첫 번째)을 고른다', async () => {
 test('프로젝트 대신 팀 전체를 고를 수 있다', async () => {
   const dir = root();
   const shown: string[] = [];
-  await runInit({ root: dir, ask: answers('y', '4').ask, discover: found, log: l => void shown.push(l) });
-  // 후보: 프로젝트 셋(1~3) 다음에 팀 둘(4~5)
+  await runInit({ root: dir, ask: answers('y', '3').ask, discover: found, log: l => void shown.push(l) });
+  // 후보: 가져올 이슈가 있는 프로젝트 둘(1~2) 다음에 팀 둘(3~4)
   assert.deepEqual(configOf(dir).source.linear, { team: '제품', stateTypes: ['unstarted', 'started'] });
 });
 
@@ -142,4 +142,30 @@ test('가져오기: 상태를 따로 정하지 않으면 시작 전과 진행 �
   await pullLinear({ ...common, root: root(), agent, skill: 's', filter: { project: '회의 보고' }, dryRun: true });
   assert.match(tasks[0].prompt, /unstarted.*started/s);
   assert.doesNotMatch(tasks[0].prompt, /backlog.*가져온다/);
+});
+
+test('가져올 이슈가 없는 후보는 보여 주지 않고, 후보가 많으면 앞의 것만 보여 준다', async () => {
+  const many: LinearScopes = {
+    projects: Array.from({ length: 30 }, (_, i) => ({ name: `프로젝트-${String(i).padStart(2, '0')}`, team: '팀', ready: i })),
+    teams: [{ name: '빈 팀', ready: 0 }, { name: '팀', ready: 40 }],
+  };
+  const shown: string[] = [];
+  const dir = root();
+  await runInit({ root: dir, ask: answers('y', '1').ask, discover: async () => ({ ok: true as const, scopes: many }), log: l => void shown.push(l) });
+  const list = shown.filter(l => /^\s+\d+\)/.test(l));
+  // 프로젝트는 앞의 10개, 팀은 가져올 이슈가 있는 하나
+  assert.equal(list.length, 11);
+  assert.ok(!shown.join('\n').includes('프로젝트-00'), '이슈가 0건인 프로젝트는 빠진다');
+  assert.ok(!shown.join('\n').includes('빈 팀'));
+  assert.match(list[0], /프로젝트-29/);
+  assert.match(shown.join('\n'), /그 밖에 \d+개.*--project/s);
+  assert.equal(configOf(dir).source.linear.project, '프로젝트-29');
+});
+
+test('모든 후보에 가져올 이슈가 없으면 그 사실을 알리고 후보는 그대로 보여 준다', async () => {
+  const empty: LinearScopes = { projects: [{ name: '새 프로젝트', team: '팀', ready: 0 }], teams: [] };
+  const shown: string[] = [];
+  await runInit({ root: root(), ask: answers('y', '1').ask, discover: async () => ({ ok: true as const, scopes: empty }), log: l => void shown.push(l) });
+  assert.match(shown.join('\n'), /새 프로젝트/);
+  assert.match(shown.join('\n'), /시작 전이거나 진행 중인 이슈가 없습니다/);
 });

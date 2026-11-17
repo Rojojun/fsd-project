@@ -41,7 +41,8 @@ const DEFAULT_CONFIG: Settings = {
     'dev-backend': { agent: 'claude' },
     'dev-frontend': { agent: 'claude' },
     qa: { agent: 'claude' },
-    'linear-reader': { agent: 'claude' },
+    // 옮겨 적기와 살펴보기는 판단이 필요 없는 일이라 작은 모델을 쓴다.
+    'linear-reader': { agent: 'claude', model: 'claude-haiku-5-5' },
   },
   agent: { timeoutMs: 600_000, maxTurns: 30 },
   verify: { command: null, timeoutMs: 600_000 },

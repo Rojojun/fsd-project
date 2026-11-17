@@ -30,6 +30,9 @@ export type InitResult = Readonly<{ linear?: LinearFilter | null }>;
 export const READY_STATE_TYPES = ['unstarted', 'started'] as const;
 
 const TRIES = 3;
+/** 한 번에 보여 줄 후보의 수. 프로젝트와 팀 각각 */
+const SHOW_PROJECTS = 10;
+const SHOW_TEAMS = 2;
 const yes = (answer: string) => /^(y|yes|ㅇ|예|네|응)$/i.test(answer.trim());
 
 const save = (root: string, linear: LinearFilter | null) => {
@@ -67,14 +70,22 @@ export const runInit = async ({ root, ask, discover, log, preset = {} }: InitInp
 
   // 진행할 이슈가 많은 것부터. 프로젝트 하나가 대상 프로젝트 하나에 해당하는 경우가 많아 프로젝트를 먼저 보여 준다.
   const byReady = <T extends { name: string; ready: number }>(a: T, b: T) => b.ready - a.ready || a.name.localeCompare(b.name);
+  const total = found.scopes.projects.length + found.scopes.teams.length;
+  if (total === 0) return files('Linear에서 프로젝트나 팀을 찾지 못했습니다.');
+  // 가져올 이슈가 없는 범위는 골라도 아무것도 오지 않는다. 전부 그런 경우가 아니면 보여 주지 않는다.
+  const anyReady = [...found.scopes.projects, ...found.scopes.teams].some(s => s.ready > 0);
+  const worth = <T extends { ready: number }>(list: readonly T[]) => (anyReady ? list.filter(s => s.ready > 0) : [...list]);
   const candidates = [
-    ...[...found.scopes.projects].sort(byReady).map(p => ({ label: `프로젝트  ${p.name}  (팀 ${p.team}, 진행할 이슈 ${p.ready}건)`, scope: { project: p.name } })),
-    ...[...found.scopes.teams].sort(byReady).map(t => ({ label: `팀 전체   ${t.name}  (진행할 이슈 ${t.ready}건)`, scope: { team: t.name } })),
+    ...worth(found.scopes.projects).sort(byReady).slice(0, SHOW_PROJECTS).map(p => ({ label: `프로젝트  ${p.name}  (팀 ${p.team}, 진행할 이슈 ${p.ready}건)`, scope: { project: p.name } })),
+    ...worth(found.scopes.teams).sort(byReady).slice(0, SHOW_TEAMS).map(t => ({ label: `팀 전체   ${t.name}  (진행할 이슈 ${t.ready}건)`, scope: { team: t.name } })),
   ];
-  if (candidates.length === 0) return files('Linear에서 프로젝트나 팀을 찾지 못했습니다.');
 
   log('어느 범위의 이슈를 요구사항으로 쓸까요? 시작 전이거나 진행 중인 이슈만 가져옵니다(백로그는 가져오지 않습니다).');
+  if (!anyReady) log('지금은 어느 범위에도 시작 전이거나 진행 중인 이슈가 없습니다. 범위를 골라 두면 이슈가 생겼을 때 가져옵니다.');
   candidates.forEach((c, i) => log(`  ${i + 1}) ${c.label}${i === 0 ? '  ← 추천' : ''}`));
+  if (total > candidates.length) {
+    log(`  그 밖에 ${total - candidates.length}개가 더 있습니다. 목록에 없는 것은 agdd init --linear --project "<이름>" (또는 --team)으로 직접 정합니다.`);
+  }
 
   for (let attempt = 0; attempt < TRIES; attempt++) {
     const answer = (await ask(`번호를 고르세요 (Enter = 1): `)).trim();

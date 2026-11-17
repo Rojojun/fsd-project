@@ -29,11 +29,15 @@ export type TickResult = Readonly<{
   outcome:
     | 'idle' | 'question' | 'drafted' | 'returned' | 'invalid-output' | 'agent-failed'
     /** implemented: 구현 완료. verified: E2E 통과. failed: E2E 실패(버그 기록) */
-    | 'implemented' | 'verified' | 'failed';
+    | 'implemented' | 'verified' | 'failed'
+    /** audit: 지적을 올렸다 / 지적할 것이 없다 */
+    | 'findings' | 'clean';
   message: string;
   /** 바뀐 상태. 없으면 아무것도 바뀌지 않았다. */
   state?: RequirementState;
   run?: AgentResult;
+  /** 요구사항 여럿의 상태를 바꾼 사이클(audit) */
+  states?: readonly RequirementState[];
   /** 에이전트를 여럿 부른 사이클의 호출들 */
   runs?: readonly Readonly<{ part: string; run: AgentResult }>[];
 }>;

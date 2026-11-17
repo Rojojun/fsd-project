@@ -1,33 +1,29 @@
 {
   "designRequired": true,
-  "approvedDesignHash": null,
+  "approvedDesignHash": "d7ea6a0ccdddbefb3435659b5d3e6202311877a7d6af876268acada3534a15ea",
   "id": "UI-01",
-  "status": "specified",
+  "status": "designed",
   "reqHash": "f5be3b9e7ad121e2a3bc07b727fd47592fbfc2cea0890c637a4c1f5f6be8e4e4",
-  "holds": [
-    {
-      "id": "A3-ui",
-      "kind": "approval",
-      "raisedBy": "design",
-      "message": "디자인 초안 UI 검토 요청",
-      "at": "2026-11-17T07:44:37.833Z",
-      "artifactHash": "20f54904e53c7ada357b51a433af4171d1823c1a6d2482d34dc04850790a582b",
-      "aspect": "ui"
-    },
-    {
-      "id": "A3-ux",
-      "kind": "approval",
-      "raisedBy": "design",
-      "message": "디자인 초안 UX 검토 요청",
-      "at": "2026-11-17T07:44:37.833Z",
-      "artifactHash": "20f54904e53c7ada357b51a433af4171d1823c1a6d2482d34dc04850790a582b",
-      "aspect": "ux"
-    }
-  ],
+  "holds": [],
   "approvedSpecHash": "82e7cd635df3b7a03fb5dec20e100033148f2fb985077ad25918107840f0dac7",
   "bug": null,
-  "decisions": [],
-  "feedback": [],
+  "decisions": [
+    {
+      "question": "1) 지적 \"완료 표시가 좀 약해 보인다\"를 확인 가능한 규칙으로 바꾸려면 어느 쪽을 뜻하는지 정해 주셔야 합니다. 이전 디자인의 완료 표시는 이미 UI 기준 그대로입니다(--success 색 체크 아이콘 16px + \"완료\" 글자 14px 400, 보조 글 크기). 그래서 표시를 더 강하게 하는 방법은 모두 UI 기준의 값을 바꾸거나 기준에 없는 모양을 더해야 합니다. 어느 방법을 따를지 골라 주세요(여럿 골라도 됩니다). (A) \"완료\" 글자 굵기를 600으로 한다(기준의 보조 글 400과 어긋남). (B) \"완료\" 글자를 본문 크기 16px로, 아이콘을 20px로 키운다(기준의 상태 표시 14px, 아이콘 16px와 어긋남). (C) 완료 표시를 --success 색 1px 테두리, 모서리 6px, 좌우 안쪽 여백 8px, 높이 28px인 배지로 감싼다(기준에 없는 컴포넌트를 새로 만듦. 바탕색은 새 색 조합이 생기지 않게 투명으로 둠). (D) 완료 표시는 그대로 두고, 미완료 줄의 \"완료\" 버튼을 주 버튼에서 보조 버튼(투명 바탕, --border 테두리)으로 바꿔 상대적으로 완료 표시가 눈에 띄게 한다(기준의 버튼 종류 안에서 가능함). (E) 그 밖의 뜻이면 무엇을 바꾸기를 원하는지 알려 주세요.\n2) 고른 방법을 이 화면(UI-01)의 완료 표시에만 적용할까요(scope: design), 아니면 UI 기준의 \"상태 표시\" 컴포넌트 규칙으로 올려 다른 화면의 상태 표시에도 똑같이 적용할까요(scope: language)? (A)나 (B)처럼 UI 기준의 값과 어긋나는 방법을 고르셨다면, 이번 결정이 UI 기준의 해당 값보다 우선한다고 보면 되는지도 알려 주세요.",
+      "answer": "1) (A)와 (B) 둘 다. 완료 표시의 글자는 16px 600, 아이콘은 20px. 2) language: UI 기준의 상태 표시 규칙으로 올린다. 이번 결정이 UI 기준의 기존 값(14px 400, 아이콘 16px)보다 우선한다.",
+      "reqHash": "f5be3b9e7ad121e2a3bc07b727fd47592fbfc2cea0890c637a4c1f5f6be8e4e4",
+      "at": "2026-11-17T07:46:49.307Z"
+    }
+  ],
+  "feedback": [
+    {
+      "message": "완료 표시가 좀 약해 보인다",
+      "specHash": "20f54904e53c7ada357b51a433af4171d1823c1a6d2482d34dc04850790a582b",
+      "at": "2026-11-17T07:46:12.562Z",
+      "about": "design",
+      "aspect": "ui"
+    }
+  ],
   "history": [
     {
       "from": null,
@@ -60,6 +56,55 @@
       "actor": "design",
       "at": "2026-11-17T07:44:37.833Z",
       "message": "디자인 초안 제출 → 승인 대기"
+    },
+    {
+      "from": "specified",
+      "to": "specified",
+      "transition": "reject",
+      "actor": "human",
+      "at": "2026-11-17T07:46:12.562Z",
+      "message": "반려(UI): 완료 표시가 좀 약해 보인다",
+      "note": "ui"
+    },
+    {
+      "from": "specified",
+      "to": "specified",
+      "transition": "ask",
+      "actor": "design",
+      "at": "2026-11-17T07:46:12.778Z",
+      "message": "질문: 1) 지적 \"완료 표시가 좀 약해 보인다\"를 확인 가능한 규칙으로 바꾸려면 어느 쪽을 뜻하는지 정해 주셔야 합니다. 이전 디자인의 완료 표시는 이미 UI 기준 그대로입니다(--success 색 체크 아이콘 16px + \"완료\" 글자 14px 400, 보조 글 크기). 그래서 표시를 더 강하게 하는 방법은 모두 UI 기준의 값을 바꾸거나 기준에 없는 모양을 더해야 합니다. 어느 방법을 따를지 골라 주세요(여럿 골라도 됩니다). (A) \"완료\" 글자 굵기를 600으로 한다(기준의 보조 글 400과 어긋남). (B) \"완료\" 글자를 본문 크기 16px로, 아이콘을 20px로 키운다(기준의 상태 표시 14px, 아이콘 16px와 어긋남). (C) 완료 표시를 --success 색 1px 테두리, 모서리 6px, 좌우 안쪽 여백 8px, 높이 28px인 배지로 감싼다(기준에 없는 컴포넌트를 새로 만듦. 바탕색은 새 색 조합이 생기지 않게 투명으로 둠). (D) 완료 표시는 그대로 두고, 미완료 줄의 \"완료\" 버튼을 주 버튼에서 보조 버튼(투명 바탕, --border 테두리)으로 바꿔 상대적으로 완료 표시가 눈에 띄게 한다(기준의 버튼 종류 안에서 가능함). (E) 그 밖의 뜻이면 무엇을 바꾸기를 원하는지 알려 주세요.\n2) 고른 방법을 이 화면(UI-01)의 완료 표시에만 적용할까요(scope: design), 아니면 UI 기준의 \"상태 표시\" 컴포넌트 규칙으로 올려 다른 화면의 상태 표시에도 똑같이 적용할까요(scope: language)? (A)나 (B)처럼 UI 기준의 값과 어긋나는 방법을 고르셨다면, 이번 결정이 UI 기준의 해당 값보다 우선한다고 보면 되는지도 알려 주세요."
+    },
+    {
+      "from": "specified",
+      "to": "specified",
+      "transition": "answer",
+      "actor": "human",
+      "at": "2026-11-17T07:46:49.307Z",
+      "message": "답변: 1) (A)와 (B) 둘 다. 완료 표시의 글자는 16px 600, 아이콘은 20px. 2) language: UI 기준의 상태 표시 규칙으로 올린다. 이번 결정이 UI 기준의 기존 값(14px 400, 아이콘 16px)보다 우선한다."
+    },
+    {
+      "from": "specified",
+      "to": "specified",
+      "transition": "draftDesign",
+      "actor": "design",
+      "at": "2026-11-17T07:46:49.477Z",
+      "message": "디자인 초안 제출 → 승인 대기"
+    },
+    {
+      "from": "specified",
+      "to": "specified",
+      "transition": "approveDesign",
+      "actor": "human",
+      "at": "2026-11-17T07:47:34.248Z",
+      "message": "디자인 UI 관점 승인"
+    },
+    {
+      "from": "specified",
+      "to": "designed",
+      "transition": "approveDesign",
+      "actor": "human",
+      "at": "2026-11-17T07:47:34.414Z",
+      "message": "디자인 UX 관점 승인"
     }
   ]
 }

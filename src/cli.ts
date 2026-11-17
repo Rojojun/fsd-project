@@ -35,6 +35,9 @@ type Ctx = Readonly<{ root: string; docs: readonly RequirementDoc[]; states: rea
 const holdLabel = (h: Hold) =>
   h.kind === 'question' ? `질문 대기 ${h.id}(${h.raisedBy}): ${h.message}` : `승인 대기 ${h.id}(${h.raisedBy})`;
 
+/** 표에 쓰는 짧은 이름. 내용은 show에서 본다. */
+const holdName = (h: Hold) => `${h.kind === 'question' ? '질문 대기' : '승인 대기'} ${h.id}(${h.raisedBy})`;
+
 const table = (rows: string[][]) => {
   const widths = rows[0].map((_, i) => Math.max(...rows.map(r => r[i].length)));
   return rows.map(r => r.map((c, i) => c.padEnd(widths[i])).join('  ').trimEnd()).join('\n');
@@ -62,7 +65,7 @@ const status = (ctx: Ctx) => {
     doc?.priority ?? '-',
     s.status,
     phaseLabel(flags),
-    s.holds.map(holdLabel).join(' / ') || (s.bug ? `버그: ${s.bug.evidence.split('\n')[0]}` : ''),
+    s.holds.map(holdName).join(' / ') || (s.bug ? `버그: ${s.bug.evidence.split('\n')[0].slice(0, 40)}` : ''),
     doc?.title ?? '',
   ]);
   return table([['ID', '우선순위', '상태', '단계', '대기 사유', '제목'], ...rows]);

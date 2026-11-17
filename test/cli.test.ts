@@ -252,3 +252,14 @@ test('요구사항이 인용한 정책 파일이 없으면 중단한다', () => 
   assert.equal(r.status, 1);
   assert.match(r.stderr, /missing-policy/);
 });
+
+test('status 표는 질문이 길고 여러 줄이어도 요구사항당 한 줄이다', () => {
+  const root = workspace({ 'A-1.md': req('A-1'), 'B-1.md': req('B-1') });
+  run(root, 'sync');
+  writeState(root, apply(stateOf(root, 'A-1'), 'ask', 'spec', { question: `1) ${'긴 질문 '.repeat(40)}\n2) 둘째 질문` }, at));
+  const lines = run(root, 'status').stdout.trimEnd().split('\n');
+  assert.equal(lines.length, 3);
+  assert.match(lines[1], /질문 대기 Q\d+\(spec\)/);
+  assert.ok(lines.every(l => l.length < 120), '줄이 너무 깁니다');
+  assert.match(run(root, 'show', 'A-1').stdout, /둘째 질문/);
+});

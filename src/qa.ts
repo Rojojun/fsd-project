@@ -182,22 +182,33 @@ export const renderQaPlan = (plan: QaPlan, spec: SavedSpec, design: SavedDesign 
 
 const KEEP_LINES = 60;
 
+/** 테스트 도구들이 실패를 알리는 줄: Playwright의 "N failed"와 그 아래 목록, node:test의 "not ok", 흔한 실패 기호 */
+const failureSummary = (lines: readonly string[]): string[] => {
+  const start = lines.findIndex(l => /^\s*\d+ failed\b/.test(l));
+  const playwright = start < 0 ? [] : [lines[start], ...lines.slice(start + 1).filter((l, i, rest) => rest.slice(0, i + 1).every(x => /^\s{2,}\S/.test(x) && !/^\s*\d+ (passed|skipped|flaky)\b/.test(x)))];
+  const others = lines.filter(l => /^\s*(not ok\b|✘|✗|FAIL\b)/.test(l));
+  return [...new Set([...playwright, ...others].map(l => l.trim()))];
+};
+
 /**
  * 실패 출력에서 실행할 때마다 바뀌는 부분을 지운다.
  * 같은 실패가 같은 증거가 되어야 반복을 알아챌 수 있다(flags의 sameFailureStreak).
+ * 실패한 테스트의 목록을 맨 앞에 둔다. 출력이 길어 끝부분만 남겨도 무엇이 실패했는지는 남는다.
  */
-export const normalizeEvidence = (output: string, root: string): string =>
-  output
+export const normalizeEvidence = (output: string, root: string): string => {
+  const lines = output
     .replace(/\u001b\[[0-9;]*[A-Za-z]/g, '')
     .replaceAll(`/private${root}`, '.')
     .replaceAll(root, '.')
     .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z?/g, '<시각>')
+    // 실행 시간: "(12.5ms)", "(1.2s)", "duration_ms 104.2". 설정값("timeout of 30000ms")은 남긴다.
     .replace(/\s*\(\d+(\.\d+)?\s?m?s\)/g, '')
     .replace(/(duration_ms)\s+\d+(\.\d+)?/g, '$1')
-    .replace(/\b\d+(\.\d+)?\s?ms\b/g, '')
     .split('\n')
-    .map(line => line.trimEnd())
+    .map(line => line.trimEnd());
+  const summary = failureSummary(lines);
+  const rest = lines
     .filter((line, i, all) => line !== '' || all[i - 1] !== '')
-    .slice(-KEEP_LINES)
-    .join('\n')
-    .trim();
+    .slice(-(KEEP_LINES - summary.length));
+  return [...summary, ...(summary.length ? [''] : []), ...rest].join('\n').trim();
+};

@@ -689,3 +689,14 @@ test('init으로 고른 범위로 pull이 돈다', () => {
   assert.match(argsOf(root, 'claude'), /회의 보고/);
   assert.match(argsOf(root, 'claude'), /unstarted, started/);
 });
+
+test('status는 버그를 구현 중일 때만 보여 준다', () => {
+  const root = specifiedApi();
+  runEnv(root, fakeByPrompt(root, 'claude', [{ marker: '', stdout: devOut(['a'], 's') }]), 'tick', 'dev');
+  verifyConfig(root, 'echo "not ok 1 - AC-1 빈 배열이 아님"; exit 1');
+  runEnv(root, fakeByPrompt(root, 'claude', [{ marker: '', stdout: qaOut }], WRITE_TEST), 'tick', 'verify');
+  assert.match(run(root, 'status').stdout, /in-dev.*버그: not ok 1 - AC-1/);
+  runEnv(root, fakeByPrompt(root, 'claude', [{ marker: '', stdout: devOut(['a'], '고침') }]), 'tick', 'dev');
+  assert.equal(stateOf(root, 'A-1').status, 'implemented');
+  assert.doesNotMatch(run(root, 'status').stdout, /버그/);
+});

@@ -1,0 +1,490 @@
+{
+  "summary": "UI-01 액션 아이템 목록 화면을 밖에서 검사한다. 테스트마다 `createServer({ tasks })`로 서버를 빈 포트(`listen(0)`)에 띄우고 끝나면 닫는다(README 방식). `GET /`는 Playwright `request`로 실제 HTTP 요청을 보내 확인하고, 나머지는 설치된 Chrome(`playwright.config.mjs`)에서 `/`를 열어 보고 누르는 것으로 확인한다. 화면에서 한 동작이 서버에 저장되었는지는 `GET /tasks`를 실제로 다시 요청해 확인한다. 늦은 응답, 500, 네트워크 오류는 `page.route`로 브라우저 쪽에서 흉내 낸다. 0.3초 경계는 `page.clock`으로 시계를 멈추고 249ms/350ms를 정확히 지나가게 해서 확인한다. 브라우저 시간대는 `timezoneId: 'UTC'`로 고정하고, 시간대 반영을 보려고 `Asia/Seoul` 시나리오를 하나 더 둔다. '완료된 액션 아이템이 저장되어 있다'는 상태는 스펙에 없는 시드 옵션(`completed: true`)을 쓰지 않고 실제 `POST /tasks/{id}/complete` 요청으로 만든다(TASK-02 QA와 같은 방식).\n\n범위: 인수 조건 AC-1~AC-21 모두. 디자인의 화면 상태 9개(불러오는 중 0.3초 전/후, 내용 있음, 완료 처리 중, 완료 처리 성공, 완료 처리 실패, 비어 있음, 불러오기 실패, 좁은 화면 320px) 모두. UX 기준 가운데 이 화면에 해당하는 것: 키보드만으로 조작(Tab 순서, Enter/Space), 완료 뒤 초점 이동(다음 완료 버튼, 없으면 ul), 초점 테두리, 누를 수 있는 것 36px 이상, 끝난 항목을 숨기거나 흐리게 하지 않음, 색 말고 글·아이콘으로 상태 구분, aria-live 알림, 토스트·팝업 없음, 답을 받기 전 미리 바꾸지 않음, 화면 전체를 다시 불러오지 않음, 새로 고침 뒤 서버 상태 유지. UI 기준 가운데 깨지면 눈에 띄는 것: 정확한 문구, 날짜 이름표 없음, 금지 낱말과 느낌표 없음, 완료 표시 크기(사람이 결정한 아이콘 20px, 글자 16px 600), 320px에서 가로로 밀리지 않음과 버튼·표시가 아래로 내려옴, 긴 제목이 잘리지 않음, 밝은 화면과 어두운 화면에서 글자 대비 4.5:1 이상.\n\n실행 결과: `npx playwright test e2e/UI-01/`로 38개 모두 통과했다. `--repeat-each=3`(114회)으로 돌려도 모두 통과해 불안정한 테스트는 없다. 구현 결함은 발견되지 않았다. 파일: `e2e/UI-01/helpers.mjs`(서버 띄우기, 요청 세기, 줄·버튼 찾기 도우미), `list.spec.mjs`, `complete.spec.mjs`, `ux-ui.spec.mjs`. 테스트 폴더 밖은 건드리지 않았다.\n\n일부러 검사하지 않은 것:\n- 색상 코드, 간격(16/24/32px), 모서리, 테두리 같은 픽셀 값: 깨지기 쉽고 사용자가 알아채는 차이가 아니다. 대신 대비(읽히는가)와 배치(아래로 내려오는가, 가로로 밀리는가)만 본다.\n- 스크롤 위치 유지: 이 화면의 목록은 한 화면 안에 들어가고 완료 처리로 줄이 생기거나 없어지지 않는다. 그래서 '화면 전체를 다시 불러오지 않음'(GET 요청 수)과 '순서 유지'로 대신 확인한다.\n- 기존 API(`GET /tasks`, `POST /tasks/{id}/complete`)의 세부 동작: TASK-01, TASK-02 E2E가 다룬다. 여기서는 화면과 이어지는 부분만 확인한다.\n- 응답이 배열이 아닌 경우, 제목이 한글이 아닐 때의 조사(을/를): 스펙이 정하지 않았다.\n- aria-live 영역이 눈에 보이지 않는가: 디자인이 '화면 낭독기에만 들린다'고 했지만, 1px로 감춘 요소는 브라우저 기준으로는 '보임'이라서 밖에서 판정하기 어렵다. 내용과 알림 창이 없음만 확인한다.",
+  "scenarios": [
+    {
+      "id": "S-1",
+      "target": "api",
+      "screen": "",
+      "covers": [
+        "AC-1"
+      ],
+      "basis": "acceptance",
+      "title": "GET /는 200과 text/html을 돌려주고 브라우저로 열린다",
+      "steps": "1) 빈 서버를 띄운다. 2) `GET /`를 요청한다. 3) 브라우저로 `/`를 연다.",
+      "expected": "요청 응답은 200이고 Content-Type이 text/html로 시작한다. 브라우저 응답도 200이고 제목 \"액션 아이템\"이 보인다.",
+      "file": "e2e/UI-01/list.spec.mjs"
+    },
+    {
+      "id": "S-2",
+      "target": "screen",
+      "screen": "내용 있음",
+      "covers": [
+        "AC-2"
+      ],
+      "basis": "acceptance",
+      "title": "저장된 \"회의록 공유\"가 목록(ul)의 항목(li)에 보인다",
+      "steps": "1) id a1, 제목 \"회의록 공유\"인 액션 아이템 하나로 서버를 띄운다. 2) `/`를 연다.",
+      "expected": "ul > li가 1개이고, 그 안에 \"회의록 공유\"가 보인다. 제목 \"액션 아이템\"이 보인다.",
+      "file": "e2e/UI-01/list.spec.mjs"
+    },
+    {
+      "id": "S-3",
+      "target": "screen",
+      "screen": "내용 있음",
+      "covers": [
+        "AC-3"
+      ],
+      "basis": "acceptance",
+      "title": "목록은 GET /tasks 응답 순서(B, C, A)대로 보인다",
+      "steps": "1) A(11-15), B(11-17), C(11-16)로 서버를 띄운다. 2) GET /tasks로 순서를 확인한다. 3) `/`를 연다.",
+      "expected": "API 순서가 B, C, A이고, 화면의 li는 3개이며 위에서부터 B, C, A다.",
+      "file": "e2e/UI-01/list.spec.mjs"
+    },
+    {
+      "id": "S-4",
+      "target": "screen",
+      "screen": "내용 있음",
+      "covers": [
+        "AC-3"
+      ],
+      "basis": "acceptance",
+      "title": "화면은 다시 정렬하지 않는다",
+      "steps": "1) 서버를 띄우고 브라우저의 GET /tasks 응답을 A, B, C(날짜 순서가 아님)로 바꾼다. 2) `/`를 연다.",
+      "expected": "li가 위에서부터 A, B, C 그대로다.",
+      "file": "e2e/UI-01/list.spec.mjs"
+    },
+    {
+      "id": "S-5",
+      "target": "screen",
+      "screen": "내용 있음",
+      "covers": [
+        "AC-4"
+      ],
+      "basis": "acceptance",
+      "title": "브라우저 시간대가 UTC면 생성일 2026-11-17이 보이고 시각은 보이지 않는다",
+      "steps": "1) 제목 \"회의록 공유\", createdAt 2026-11-17T06:10:16Z로 서버를 띄운다. 2) 시간대가 UTC인 브라우저로 `/`를 연다.",
+      "expected": "그 줄에 \"2026-11-17\"이 보인다. \"06:10\"과 \"생성일\"은 보이지 않는다.",
+      "file": "e2e/UI-01/list.spec.mjs"
+    },
+    {
+      "id": "S-6",
+      "target": "screen",
+      "screen": "내용 있음",
+      "covers": [
+        "AC-4"
+      ],
+      "basis": "acceptance",
+      "title": "생성일은 브라우저 시간대 기준 날짜다",
+      "steps": "1) createdAt 2026-11-16T20:00:00Z로 서버를 띄운다. 2) 시간대가 Asia/Seoul인 브라우저로 `/`를 연다.",
+      "expected": "그 줄에 \"2026-11-17\"이 보이고 \"2026-11-16\"은 보이지 않는다.",
+      "file": "e2e/UI-01/list.spec.mjs"
+    },
+    {
+      "id": "S-7",
+      "target": "screen",
+      "screen": "내용 있음",
+      "covers": [
+        "AC-5",
+        "AC-6"
+      ],
+      "basis": "acceptance",
+      "title": "완료된 줄에는 체크 아이콘과 \"완료\" 글자가 보이고 완료 버튼이 없다",
+      "steps": "1) \"회의록 공유\"로 서버를 띄우고 POST /tasks/a1/complete로 완료한다. 2) `/`를 연다.",
+      "expected": "그 줄에 \"완료\" 글자와 아이콘이 보이고, 버튼은 하나도 없다.",
+      "file": "e2e/UI-01/list.spec.mjs"
+    },
+    {
+      "id": "S-8",
+      "target": "screen",
+      "screen": "내용 있음",
+      "covers": [
+        "AC-7"
+      ],
+      "basis": "acceptance",
+      "title": "완료되지 않은 줄에는 이름이 \"회의록 공유 완료\"인 버튼이 있다",
+      "steps": "1) 완료되지 않은 \"회의록 공유\"로 서버를 띄운다. 2) `/`를 연다.",
+      "expected": "그 줄에 접근 가능한 이름이 \"회의록 공유 완료\"이고 글자가 \"완료\"이며 누를 수 있는 버튼이 하나 있다.",
+      "file": "e2e/UI-01/list.spec.mjs"
+    },
+    {
+      "id": "S-9",
+      "target": "screen",
+      "screen": "내용 있음",
+      "covers": [
+        "AC-5",
+        "AC-6",
+        "AC-7"
+      ],
+      "basis": "acceptance",
+      "title": "완료된 줄과 미완료 줄이 섞여 있으면 줄마다 제 모습으로 보인다",
+      "steps": "1) A, B, C로 서버를 띄우고 C만 API로 완료한다. 2) `/`를 연다.",
+      "expected": "순서는 B, C, A다. C는 완료 표시가 있고 버튼이 없다. B와 A에는 완료 버튼이 있다.",
+      "file": "e2e/UI-01/list.spec.mjs"
+    },
+    {
+      "id": "S-10",
+      "target": "screen",
+      "screen": "비어 있음",
+      "covers": [
+        "AC-18",
+        "AC-19"
+      ],
+      "basis": "acceptance",
+      "title": "액션 아이템이 없으면 안내만 보이고 목록 항목은 없다",
+      "steps": "1) 빈 서버를 띄운다. 2) `/`를 연다.",
+      "expected": "\"액션 아이템이 없습니다.\"와 제목 \"액션 아이템\"이 보인다. li는 0개, 버튼은 0개이고 \"불러오는 중입니다.\"는 보이지 않는다.",
+      "file": "e2e/UI-01/list.spec.mjs"
+    },
+    {
+      "id": "S-11",
+      "target": "screen",
+      "screen": "불러오기 실패",
+      "covers": [
+        "AC-20"
+      ],
+      "basis": "acceptance",
+      "title": "GET /tasks가 500이면 실패 안내와 \"다시 시도\" 버튼이 보인다",
+      "steps": "1) GET /tasks가 500으로 답하게 한다. 2) `/`를 연다.",
+      "expected": "\"액션 아이템을 불러오지 못했습니다.\"와 \"다시 시도\" 버튼, 제목이 보인다. li는 없고 빈 목록 안내도 없다.",
+      "file": "e2e/UI-01/list.spec.mjs"
+    },
+    {
+      "id": "S-12",
+      "target": "screen",
+      "screen": "불러오기 실패",
+      "covers": [
+        "AC-20"
+      ],
+      "basis": "acceptance",
+      "title": "GET /tasks가 네트워크 오류로 실패해도 실패 화면이 보인다",
+      "steps": "1) GET /tasks가 네트워크 오류로 끊기게 한다. 2) `/`를 연다.",
+      "expected": "실패 안내와 \"다시 시도\" 버튼이 보인다.",
+      "file": "e2e/UI-01/list.spec.mjs"
+    },
+    {
+      "id": "S-13",
+      "target": "screen",
+      "screen": "불러오기 실패",
+      "covers": [
+        "AC-21"
+      ],
+      "basis": "acceptance",
+      "title": "\"다시 시도\"를 누르면 GET /tasks를 다시 요청해 목록이 보인다",
+      "steps": "1) \"회의록 공유\"로 서버를 띄우고, 첫 GET /tasks만 500으로 답하게 한다. 2) `/`를 열고 실패 화면을 확인한다. 3) \"다시 시도\"를 누른다.",
+      "expected": "GET /tasks가 모두 2번 갔다. 목록 항목에 \"회의록 공유\"가 보이고, 실패 안내와 \"다시 시도\" 버튼은 사라진다.",
+      "file": "e2e/UI-01/list.spec.mjs"
+    },
+    {
+      "id": "S-14",
+      "target": "screen",
+      "screen": "불러오기 실패",
+      "covers": [
+        "AC-21"
+      ],
+      "basis": "acceptance",
+      "title": "\"다시 시도\" 뒤의 응답이 []이면 비어 있음 안내로 바뀐다",
+      "steps": "1) 빈 서버를 띄우고 첫 GET만 503으로 답하게 한다. 2) `/`를 연다. 3) \"다시 시도\"를 누른다.",
+      "expected": "\"액션 아이템이 없습니다.\"가 보이고 실패 안내는 사라진다.",
+      "file": "e2e/UI-01/list.spec.mjs"
+    },
+    {
+      "id": "S-15",
+      "target": "screen",
+      "screen": "불러오는 중 (0.3초 전)",
+      "covers": [],
+      "basis": "ux",
+      "title": "0.3초 전에는 제목만 보이고 \"불러오는 중입니다.\"는 아직 보이지 않는다",
+      "steps": "1) GET /tasks 응답을 붙잡고 브라우저 시계를 멈춘다. 2) `/`를 연다. 3) 시계를 250ms 진행한다.",
+      "expected": "제목 \"액션 아이템\"은 보이고, \"불러오는 중입니다.\"와 li는 보이지 않는다.",
+      "file": "e2e/UI-01/list.spec.mjs"
+    },
+    {
+      "id": "S-16",
+      "target": "screen",
+      "screen": "불러오는 중",
+      "covers": [],
+      "basis": "ux",
+      "title": "0.3초가 지나면 \"불러오는 중입니다.\"가 보이고, 답이 오면 목록으로 바뀐다",
+      "steps": "1) GET /tasks 응답을 붙잡고 시계를 멈춘 채 `/`를 연다. 2) 시계를 350ms 진행한다. 3) 응답을 풀어 준다.",
+      "expected": "2) 뒤에 제목과 \"불러오는 중입니다.\"가 보이고 li는 없다. 3) 뒤에 \"회의록 공유\" 항목이 보이고 불러오는 중 문구는 사라진다.",
+      "file": "e2e/UI-01/list.spec.mjs"
+    },
+    {
+      "id": "S-17",
+      "target": "screen",
+      "screen": "완료 처리 성공",
+      "covers": [
+        "AC-8"
+      ],
+      "basis": "acceptance",
+      "title": "완료 버튼을 누르면 POST /tasks/a1/complete가 한 번 간다",
+      "steps": "1) 완료되지 않은 a1 \"회의록 공유\"로 서버를 띄우고 `/`를 연다. 2) \"회의록 공유 완료\" 버튼을 누른다. 3) 완료 표시가 나올 때까지 기다린다.",
+      "expected": "POST /tasks/a1/complete는 정확히 1번 가고, 다른 POST는 가지 않는다.",
+      "file": "e2e/UI-01/complete.spec.mjs"
+    },
+    {
+      "id": "S-18",
+      "target": "screen",
+      "screen": "완료 처리 중",
+      "covers": [
+        "AC-8",
+        "AC-15"
+      ],
+      "basis": "acceptance",
+      "title": "답을 기다리는 동안 버튼을 다시 눌러도 POST는 한 번만 간다",
+      "steps": "1) POST 응답을 붙잡는다. 2) 완료 버튼을 누르고, 누를 수 없는 상태가 된 버튼을 두 번 더 누른다. 3) 응답을 풀어 준다.",
+      "expected": "서버로 간 POST는 1개다. 응답 뒤에 완료 표시가 보인다.",
+      "file": "e2e/UI-01/complete.spec.mjs"
+    },
+    {
+      "id": "S-19",
+      "target": "screen",
+      "screen": "완료 처리 성공",
+      "covers": [
+        "AC-9",
+        "AC-10"
+      ],
+      "basis": "acceptance",
+      "title": "답을 받은 뒤 완료 표시가 보이고 버튼이 없으며, 서버에도 저장된다",
+      "steps": "1) \"회의록 공유\"로 서버를 띄우고 `/`를 연다. 2) 완료 버튼을 누른다. 3) GET /tasks를 API로 요청한다.",
+      "expected": "그 줄에 \"완료\" 글자와 아이콘이 보이고 버튼은 없다. li는 1개 그대로다. 브라우저는 GET /와 GET /tasks를 1번씩만 보냈다(화면 전체를 다시 불러오지 않는다). API에서 a1의 completed는 true다.",
+      "file": "e2e/UI-01/complete.spec.mjs"
+    },
+    {
+      "id": "S-20",
+      "target": "screen",
+      "screen": "완료 처리 성공",
+      "covers": [
+        "AC-11"
+      ],
+      "basis": "acceptance",
+      "title": "화면에서 완료한 뒤 새로 고쳐도 완료 표시가 보인다",
+      "steps": "1) `/`에서 \"회의록 공유\"를 완료하고 완료 표시가 보일 때까지 기다린다. 2) 새로 고친다.",
+      "expected": "li가 1개이고, \"회의록 공유\" 줄에 완료 표시가 보이며 버튼이 없다.",
+      "file": "e2e/UI-01/complete.spec.mjs"
+    },
+    {
+      "id": "S-21",
+      "target": "screen",
+      "screen": "완료 처리 성공",
+      "covers": [
+        "AC-12"
+      ],
+      "basis": "acceptance",
+      "title": "\"A\"를 완료해도 \"B\" 줄의 완료 버튼은 그대로다",
+      "steps": "1) 완료되지 않은 A, B로 서버를 띄우고 `/`를 연다. 2) \"A 완료\" 버튼을 누른다.",
+      "expected": "A에 완료 표시가 보이고, B에는 \"B 완료\" 버튼이 글자 \"완료\", 누를 수 있는 상태로 있다.",
+      "file": "e2e/UI-01/complete.spec.mjs"
+    },
+    {
+      "id": "S-22",
+      "target": "screen",
+      "screen": "완료 처리 성공",
+      "covers": [
+        "AC-13",
+        "AC-12"
+      ],
+      "basis": "acceptance",
+      "title": "\"C\"를 완료해도 순서는 B, C, A 그대로다",
+      "steps": "1) B, C, A 순서로 보이는 미완료 세 개로 `/`를 연다. 2) \"C 완료\" 버튼을 누른다.",
+      "expected": "C에 완료 표시가 보인다. 순서는 여전히 B, C, A이고, B와 A의 완료 버튼은 그대로다.",
+      "file": "e2e/UI-01/complete.spec.mjs"
+    },
+    {
+      "id": "S-23",
+      "target": "screen",
+      "screen": "완료 처리 성공",
+      "covers": [
+        "AC-14"
+      ],
+      "basis": "acceptance",
+      "title": "성공하면 aria-live 영역에 알림이 들어가고 알림 창은 뜨지 않는다",
+      "steps": "1) \"회의록 공유\"로 `/`를 연다. 2) 완료 버튼을 누른다.",
+      "expected": "aria-live=\"polite\" 영역이 하나 있고, 그 글자가 \"회의록 공유를 완료했습니다.\"가 된다. 브라우저 대화상자와 role=dialog/alertdialog 요소는 없다.",
+      "file": "e2e/UI-01/complete.spec.mjs"
+    },
+    {
+      "id": "S-24",
+      "target": "screen",
+      "screen": "완료 처리 중",
+      "covers": [
+        "AC-15"
+      ],
+      "basis": "acceptance",
+      "title": "답이 늦으면 버튼은 \"처리 중\"이고 누를 수 없으며 다른 줄은 그대로다",
+      "steps": "1) \"회의록 공유\"와 B로 서버를 띄우고 POST 응답을 붙잡는다. 2) \"회의록 공유 완료\"를 누른다. 3) 응답을 풀어 준다.",
+      "expected": "응답 전에는 버튼 글자가 \"처리 중\"이고 누를 수 없다. 완료 표시는 아직 없고, B의 버튼은 그대로다. 응답 뒤에는 완료 표시가 보인다.",
+      "file": "e2e/UI-01/complete.spec.mjs"
+    },
+    {
+      "id": "S-25",
+      "target": "screen",
+      "screen": "완료 처리 실패",
+      "covers": [
+        "AC-16",
+        "AC-17"
+      ],
+      "basis": "acceptance",
+      "title": "POST가 500이면 버튼이 돌아오고 그 줄 아래에 실패 안내가 한 줄 보인다",
+      "steps": "1) \"회의록 공유\"와 B로 서버를 띄우고 POST가 500으로 답하게 한다. 2) \"회의록 공유 완료\"를 누른다. 3) GET /tasks를 API로 요청한다.",
+      "expected": "\"완료 처리에 실패했습니다.\"가 정확히 하나 보이고, \"회의록 공유\" 제목보다 아래, B 줄보다 위에 있다. 버튼은 글자 \"완료\"이고 누를 수 있다. B는 그대로다. 성공 알림은 없고, API에서 a1의 completed는 false다.",
+      "file": "e2e/UI-01/complete.spec.mjs"
+    },
+    {
+      "id": "S-26",
+      "target": "screen",
+      "screen": "완료 처리 실패",
+      "covers": [
+        "AC-16",
+        "AC-17"
+      ],
+      "basis": "acceptance",
+      "title": "POST가 네트워크 오류여도 버튼이 돌아오고 실패 안내가 보인다",
+      "steps": "1) POST가 네트워크 오류로 끊기게 한다. 2) 완료 버튼을 누른다.",
+      "expected": "실패 안내가 보이고, 버튼은 글자 \"완료\"이며 누를 수 있다.",
+      "file": "e2e/UI-01/complete.spec.mjs"
+    },
+    {
+      "id": "S-27",
+      "target": "screen",
+      "screen": "완료 처리 실패",
+      "covers": [
+        "AC-17"
+      ],
+      "basis": "acceptance",
+      "title": "실패 안내는 같은 버튼을 다시 누르면 사라진다",
+      "steps": "1) POST를 붙잡아 두고 버튼을 누른 뒤 500으로 답한다. 2) 다시 누르고, 응답 전에 안내를 확인한 뒤 500으로 답한다. 3) 또 누르고 성공으로 답한다.",
+      "expected": "1) 뒤 안내가 보인다. 2) 누른 직후(처리 중) 안내가 사라지고, 실패 뒤에는 안내가 1개만 있으며 버튼이 돌아온다. 3) 누르면 안내가 사라지고 성공 뒤 완료 표시가 보인다.",
+      "file": "e2e/UI-01/complete.spec.mjs"
+    },
+    {
+      "id": "S-28",
+      "target": "screen",
+      "screen": "완료 처리 성공",
+      "covers": [
+        "AC-9"
+      ],
+      "basis": "ux",
+      "title": "키보드만으로 Tab 순서대로 이동해 Enter/Space로 완료하고, 초점이 다음 버튼으로, 마지막엔 목록으로 간다",
+      "steps": "1) B, C, A 미완료로 `/`를 연다. 2) Tab을 세 번 누르고 Shift+Tab을 두 번 누른다. 3) Enter를 누른다. 4) Space를 누른다. 5) Enter를 누른다.",
+      "expected": "Tab으로 초점이 B 완료, C 완료, A 완료 차례로 가고 다시 B로 돌아온다. B를 완료하면 초점이 C 버튼으로, C를 완료하면 A 버튼으로, A를 완료하면 ul로 간다.",
+      "file": "e2e/UI-01/ux-ui.spec.mjs"
+    },
+    {
+      "id": "S-29",
+      "target": "screen",
+      "screen": "완료 처리 성공",
+      "covers": [],
+      "basis": "ux",
+      "title": "이미 완료된 줄을 건너 초점이 다음 완료 버튼으로 간다",
+      "steps": "1) B, C, A 가운데 C를 API로 완료한 뒤 `/`를 연다. 2) B 완료 버튼에 초점을 두고 Enter를 누른다.",
+      "expected": "B가 완료되고 초점이 \"A 완료\" 버튼으로 간다.",
+      "file": "e2e/UI-01/ux-ui.spec.mjs"
+    },
+    {
+      "id": "S-30",
+      "target": "screen",
+      "screen": "불러오기 실패",
+      "covers": [
+        "AC-21"
+      ],
+      "basis": "ux",
+      "title": "\"다시 시도\"도 키보드로 누를 수 있다",
+      "steps": "1) 첫 GET을 500으로 답하게 하고 `/`를 연다. 2) Tab을 누른다. 3) Enter를 누른다.",
+      "expected": "Tab으로 \"다시 시도\"에 초점이 오고, Enter를 누르면 \"회의록 공유\" 목록이 보인다.",
+      "file": "e2e/UI-01/ux-ui.spec.mjs"
+    },
+    {
+      "id": "S-31",
+      "target": "screen",
+      "screen": "내용 있음",
+      "covers": [],
+      "basis": "ux",
+      "title": "키보드 초점이 온 버튼에 초점 테두리가 보인다",
+      "steps": "1) `/`를 연다. 2) Tab을 누른다.",
+      "expected": "\"B 완료\"에 초점이 오고, outline이 none이 아니며 두께 2px, 바깥 간격 2px이다.",
+      "file": "e2e/UI-01/ux-ui.spec.mjs"
+    },
+    {
+      "id": "S-32",
+      "target": "screen",
+      "screen": "내용 있음",
+      "covers": [],
+      "basis": "ux",
+      "title": "완료 버튼과 \"다시 시도\" 버튼은 가로세로 36px 이상이다",
+      "steps": "1) `/`를 열고 완료 버튼의 크기를 잰다. 2) GET을 500으로 바꿔 새로 고치고 \"다시 시도\"의 크기를 잰다.",
+      "expected": "두 버튼 모두 너비와 높이가 36px 이상이다.",
+      "file": "e2e/UI-01/ux-ui.spec.mjs"
+    },
+    {
+      "id": "S-33",
+      "target": "screen",
+      "screen": "내용 있음",
+      "covers": [
+        "AC-5"
+      ],
+      "basis": "ux",
+      "title": "완료된 줄은 흐리게 하지 않고, 상태는 글과 아이콘으로도 구분된다",
+      "steps": "1) C를 완료한 뒤 `/`를 연다.",
+      "expected": "C 줄은 목록에 그대로 있고, 조상까지 곱한 불투명도가 1이다. 줄에 \"완료\" 글자와 아이콘이 있다.",
+      "file": "e2e/UI-01/ux-ui.spec.mjs"
+    },
+    {
+      "id": "S-34",
+      "target": "screen",
+      "screen": "내용 있음",
+      "covers": [],
+      "basis": "ui",
+      "title": "문구: 제목은 \"액션 아이템\"이고 금지된 낱말이 없다",
+      "steps": "1) B, C, A로 `/`를 연다.",
+      "expected": "h1이 정확히 \"액션 아이템\"이다. 화면 글에 \"할 일\", \"태스크\", \"!\", \"생성일\"이 없다.",
+      "file": "e2e/UI-01/ux-ui.spec.mjs"
+    },
+    {
+      "id": "S-35",
+      "target": "screen",
+      "screen": "내용 있음",
+      "covers": [
+        "AC-5"
+      ],
+      "basis": "ui",
+      "title": "완료 표시는 아이콘 20px, \"완료\" 글자 16px 600이다",
+      "steps": "1) C를 완료한 뒤 `/`를 연다. 2) C 줄의 \"완료\" 글자와 아이콘을 잰다.",
+      "expected": "글자는 16px, 굵기 600이다. 아이콘은 가로세로 20px(반올림)이다.",
+      "file": "e2e/UI-01/ux-ui.spec.mjs"
+    },
+    {
+      "id": "S-36",
+      "target": "screen",
+      "screen": "좁은 화면 (너비 320px)",
+      "covers": [],
+      "basis": "ui",
+      "title": "320px에서 가로로 밀리지 않고, 버튼과 표시는 아래로 내려오며, 긴 제목은 잘리지 않는다",
+      "steps": "1) 너비 320px로, 긴 제목 하나와 B, C(완료), A로 `/`를 연다. 2) B의 완료를 500으로 실패시킨다.",
+      "expected": "실패 안내가 보이고, 가로 스크롤이 생기지 않는다. 긴 제목은 말줄임 없이 여러 줄로 보인다. 긴 제목, B의 완료 버튼, C의 완료 표시는 날짜 아래에 있고 오른쪽 끝이 320px 안에 있다.",
+      "file": "e2e/UI-01/ux-ui.spec.mjs"
+    },
+    {
+      "id": "S-37",
+      "target": "screen",
+      "screen": "내용 있음",
+      "covers": [],
+      "basis": "ui",
+      "title": "어두운 화면에서 글이 4.5:1 이상으로 읽힌다",
+      "steps": "1) prefers-color-scheme: dark로 `/`를 연다(C 완료). 2) B의 완료를 실패시킨다. 3) 글자색과 실제 바탕색의 대비를 잰다.",
+      "expected": "바탕이 흰색이 아니다. 화면 제목, 항목 제목, 날짜, 완료 표시, 버튼 글자, 실패 안내의 대비가 모두 4.5:1 이상이다.",
+      "file": "e2e/UI-01/ux-ui.spec.mjs"
+    },
+    {
+      "id": "S-38",
+      "target": "screen",
+      "screen": "내용 있음",
+      "covers": [],
+      "basis": "ui",
+      "title": "밝은 화면에서 글이 4.5:1 이상으로 읽힌다",
+      "steps": "1) prefers-color-scheme: light로 `/`를 연다(C 완료). 2) 대비를 잰다.",
+      "expected": "화면 제목, 항목 제목, 날짜, 완료 표시, 버튼 글자의 대비가 모두 4.5:1 이상이다.",
+      "file": "e2e/UI-01/ux-ui.spec.mjs"
+    }
+  ]
+}

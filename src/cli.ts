@@ -96,7 +96,7 @@ const status = (ctx: Ctx) => {
     doc?.priority ?? '-',
     s.status,
     phaseLabel(flags),
-    s.holds.map(holdName).join(' / ') || (s.bug ? `버그: ${s.bug.evidence.split('\n')[0].slice(0, 40)}` : ''),
+    s.holds.map(holdName).join(' / ') || (s.bug && s.status === 'in-dev' ? `버그: ${s.bug.evidence.split('\n')[0].slice(0, 40)}` : ''),
     doc?.title ?? '',
   ]);
   return table([['ID', '우선순위', '상태', '단계', '대기 사유', '제목'], ...rows]);

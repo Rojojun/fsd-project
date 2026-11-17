@@ -121,3 +121,24 @@ test('실패 증거가 길면 끝부분만 남긴다', () => {
   assert.ok(out.split('\n').length <= 60);
   assert.match(out, /line 499/);
 });
+
+test('실패 증거는 실패한 테스트의 목록을 맨 앞에 둔다 (출력이 길어 잘려도 남는다)', () => {
+  const detail = Array.from({ length: 200 }, (_, i) => `    at frame ${i}`).join('\n');
+  const output = `Running 38 tests\n  1) S-5 날짜가 보인다\n${detail}\n  2 failed\n    e2e/UI-01/list.spec.mjs:63:3 › S-5 [AC-4] 날짜가 보인다\n    e2e/UI-01/list.spec.mjs:73:3 › S-6 [AC-4] 시간대\n  36 passed (6.6s)`;
+  const out = normalizeEvidence(output, '/x');
+  const first = out.split('\n')[0];
+  assert.match(first, /2 failed/);
+  assert.match(out.split('\n').slice(0, 4).join('\n'), /S-5 \[AC-4\].*\n.*S-6 \[AC-4\]/);
+});
+
+test('node:test 형식의 실패도 목록으로 모은다', () => {
+  const out = normalizeEvidence('ok 1 - a\nnot ok 2 - AC-3 빈 배열\n  ---\n  error: x\nnot ok 3 - AC-4\n# fail 2', '/x');
+  assert.equal(out.split('\n')[0], 'not ok 2 - AC-3 빈 배열');
+  assert.equal(out.split('\n')[1], 'not ok 3 - AC-4');
+});
+
+test('실행 시간은 지우지만 설정값의 숫자는 남긴다', () => {
+  const out = normalizeEvidence('Error: Test timeout of 30000ms exceeded.\n  ✘ S-1 목록 (1.2s)\n  ✘ S-2 날짜 (812ms)', '/x');
+  assert.match(out, /Test timeout of 30000ms exceeded/);
+  assert.doesNotMatch(out, /1\.2s|812ms/);
+});

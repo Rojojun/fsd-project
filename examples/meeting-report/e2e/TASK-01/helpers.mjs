@@ -24,3 +24,12 @@ export const getTasks = async (request, baseURL) => {
 
 // ISO 8601 UTC 형식(예: 2026-11-17T06:10:16Z). 소수 초는 있어도 된다.
 export const ISO_8601_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
+
+// POST /tasks/{id}/complete(TASK-02)를 실제 HTTP로 요청해 액션 아이템을 완료 상태로 만든다.
+export const completeTask = async (request, baseURL, id) => {
+  const response = await request.post(`${baseURL}/tasks/${encodeURIComponent(id)}/complete`);
+  return response.status();
+};
+
+// 스펙이 모든 요소에 항상 넣는다고 정한 네 필드
+export const TASK_FIELDS = ['id', 'title', 'createdAt', 'completed'];

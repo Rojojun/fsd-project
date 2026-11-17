@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-17T08:29:25.417Z",
+  "node": "verify",
+  "id": "TASK-01",
+  "agent": "claude",
+  "model": "claude-opus-5-5",
+  "outcome": "verified",
+  "usage": {
+    "costUsd": 0.5233262000000001,
+    "inputTokens": 194725,
+    "outputTokens": 10901,
+    "turns": 8,
+    "durationMs": 83427
+  }
+}

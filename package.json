@@ -1,0 +1,24 @@
+{
+  "name": "agdd",
+  "version": "0.1.0",
+  "description": "자율 그래프 주도 개발 CLI",
+  "scripts": {
+    "test": "node --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit",
+    "agdd": "node src/cli.ts"
+  },
+  "type": "module",
+  "dependencies": {
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "typescript": "^5.9.3"
+  },
+  "bin": {
+    "agdd": "src/cli.ts"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

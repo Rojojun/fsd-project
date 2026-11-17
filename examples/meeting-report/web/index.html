@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>액션 아이템</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --surface: #f7f8fa;
+    --text: #182333;
+    --text-muted: #5b6b7c;
+    --border: #dbe1e6;
+    --accent: #205477;
+    --on-accent: #ffffff;
+    --success: #1f7a4d;
+    --danger: #b42318;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14181f;
+      --surface: #1b212a;
+      --text: #e8ecf1;
+      --text-muted: #9aa8b6;
+      --border: #2a323d;
+      --accent: #6fb1d9;
+      --on-accent: #0d1117;
+      --success: #5cc28f;
+      --danger: #f27a6f;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    overflow-x: hidden;
+  }
+
+  .page {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+  .page h1 {
+    margin: 0 0 24px;
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+
+  .list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .list > li {
+    padding: 16px;
+  }
+  .list > li + li {
+    border-top: 1px solid var(--border);
+  }
+  .row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .row-text {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .row-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 400;
+  }
+  .row-date {
+    margin: 0;
+    font-size: 14px;
+    color: var(--text-muted);
+  }
+  .row-error {
+    margin: 8px 0 0;
+    font-size: 14px;
+    color: var(--danger);
+  }
+
+  .status-done {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 36px;
+    flex-shrink: 0;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.5;
+    color: var(--success);
+    white-space: nowrap;
+  }
+  .status-done svg { width: 20px; height: 20px; flex-shrink: 0; }
+
+  .btn {
+    height: 36px;
+    min-width: 36px;
+    padding: 0 16px;
+    border-radius: 6px;
+    font: inherit;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.5;
+    cursor: pointer;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: var(--on-accent);
+    border: 1px solid var(--accent);
+  }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+  .btn:focus-visible,
+  .list:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .notice {
+    margin: 0;
+    padding: 32px 16px;
+    text-align: center;
+    font-size: 14px;
+    color: var(--text-muted);
+  }
+  .notice.error { color: var(--danger); }
+  .notice-block {
+    padding: 32px 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+  .notice-block .notice { padding: 0; }
+  .loading-blank { min-height: 101px; }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  @media (max-width: 479px) {
+    .page { padding: 16px; }
+    .row {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="check" viewBox="0 0 16 16">
+    <path d="M3 8.5l3.2 3.2L13 4.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+</svg>
+
+<main class="page">
+  <h1>액션 아이템</h1>
+  <div id="content"><div class="loading-blank"></div></div>
+  <div id="live" class="sr-only" aria-live="polite"></div>
+</main>
+
+<script type="module">
+  const LOADING_DELAY_MS = 300;
+
+  const content = document.getElementById('content');
+  const live = document.getElementById('live');
+
+  // ---------- 순수 함수 ----------
+
+  const pad2 = (n) => String(n).padStart(2, '0');
+
+  // 브라우저 시간대 기준 YYYY-MM-DD.
+  const formatDate = (iso) => {
+    const d = new Date(iso);
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  };
+
+  // 마지막 글자가 한글이면 받침에 따라 을/를을 고르고, 아니면 "을(를)"로 쓴다.
+  const objectParticle = (word) => {
+    const code = word.charCodeAt(word.length - 1) - 0xac00;
+    if (Number.isNaN(code) || code < 0 || code > 11171) return '을(를)';
+    return code % 28 === 0 ? '를' : '을';
+  };
+
+  const completedMessage = (title) => `${title}${objectParticle(title)} 완료했습니다.`;
+
+  // ---------- DOM 만들기 ----------
+
+  const el = (tag, props = {}, children = []) => {
+    const node = Object.assign(document.createElement(tag), props);
+    node.append(...children);
+    return node;
+  };
+
+  const svgCheck = () => {
+    const NS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('aria-hidden', 'true');
+    const use = document.createElementNS(NS, 'use');
+    use.setAttribute('href', '#check');
+    svg.append(use);
+    return svg;
+  };
+
+  const doneStatus = () => el('span', { className: 'status-done' }, [svgCheck(), '완료']);
+
+  const completeButton = (task) => {
+    const button = el('button', { className: 'btn btn-primary', type: 'button', textContent: '완료' });
+    button.setAttribute('aria-label', `${task.title} 완료`);
+    button.addEventListener('click', () => completeTask(task, button));
+    return button;
+  };
+
+  const taskItem = (task) =>
+    el('li', {}, [
+      el('div', { className: 'row' }, [
+        el('div', { className: 'row-text' }, [
+          el('p', { className: 'row-title', textContent: task.title }),
+          el('p', { className: 'row-date', textContent: formatDate(task.createdAt) }),
+        ]),
+        task.completed ? doneStatus() : completeButton(task),
+      ]),
+    ]);
+
+  const taskList = (tasks) => {
+    const list = el('ul', { className: 'list', tabIndex: -1 }, tasks.map(taskItem));
+    return list;
+  };
+
+  const notice = (text, extraClass = '') =>
+    el('p', { className: `notice ${extraClass}`.trim(), textContent: text });
+
+  const views = {
+    blank: () => el('div', { className: 'loading-blank' }),
+    loading: () => notice('불러오는 중입니다.'),
+    empty: () => notice('액션 아이템이 없습니다.'),
+    list: (tasks) => taskList(tasks),
+    error: () =>
+      el('div', { className: 'notice-block' }, [
+        notice('액션 아이템을 불러오지 못했습니다.', 'error'),
+        Object.assign(el('button', { className: 'btn btn-primary', type: 'button', textContent: '다시 시도' }), {
+          onclick: () => load(),
+        }),
+      ]),
+  };
+
+  const show = (node) => content.replaceChildren(node);
+
+  const announce = (text) => {
+    live.textContent = '';
+    // 같은 글이 이어져도 다시 읽히도록 비운 뒤 다음 틀에서 넣는다.
+    requestAnimationFrame(() => { live.textContent = text; });
+  };
+
+  // ---------- 서버 요청 ----------
+
+  const requestJson = async (url, init) => {
+    const res = await fetch(url, { cache: 'no-store', ...init });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  };
+
+  // ---------- 목록 불러오기 ----------
+
+  let loadSeq = 0;
+
+  const load = async () => {
+    const seq = ++loadSeq;
+    const isCurrent = () => seq === loadSeq;
+    show(views.blank());
+    const timer = setTimeout(() => isCurrent() && show(views.loading()), LOADING_DELAY_MS);
+    try {
+      const tasks = await requestJson('/tasks');
+      if (!Array.isArray(tasks)) throw new Error('not an array');
+      if (isCurrent()) show(tasks.length === 0 ? views.empty() : views.list(tasks));
+    } catch {
+      if (isCurrent()) show(views.error());
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  // ---------- 완료 처리 ----------
+
+  const focusWasLost = (button) =>
+    [button, document.body, null].includes(document.activeElement);
+
+  // 이 줄 다음에 있는 누를 수 있는 완료 버튼. 없으면 목록.
+  const nextFocusTarget = (item) => {
+    const list = item.closest('ul');
+    const buttons = [...list.querySelectorAll('li button')];
+    const after = buttons.filter(
+      (b) => !b.disabled && (item.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) && !item.contains(b),
+    );
+    return after[0] ?? list;
+  };
+
+  const rowError = () => el('p', { className: 'row-error', textContent: '완료 처리에 실패했습니다.' });
+
+  const completeTask = async (task, button) => {
+    if (button.disabled) return;
+    const item = button.closest('li');
+    item.querySelector('.row-error')?.remove();
+    button.disabled = true;
+    button.textContent = '처리 중';
+
+    try {
+      await requestJson(`/tasks/${encodeURIComponent(task.id)}/complete`, { method: 'POST' });
+      const shouldMoveFocus = focusWasLost(button);
+      button.replaceWith(doneStatus());
+      if (shouldMoveFocus) nextFocusTarget(item).focus();
+      announce(completedMessage(task.title));
+    } catch {
+      const shouldRestoreFocus = focusWasLost(button);
+      button.disabled = false;
+      button.textContent = '완료';
+      item.append(rowError());
+      if (shouldRestoreFocus) button.focus();
+    }
+  };
+
+  load();
+</script>
+</body>
+</html>

@@ -2,7 +2,7 @@
   "designRequired": true,
   "approvedDesignHash": "d7ea6a0ccdddbefb3435659b5d3e6202311877a7d6af876268acada3534a15ea",
   "id": "UI-01",
-  "status": "designed",
+  "status": "implemented",
   "reqHash": "f5be3b9e7ad121e2a3bc07b727fd47592fbfc2cea0890c637a4c1f5f6be8e4e4",
   "holds": [],
   "approvedSpecHash": "82e7cd635df3b7a03fb5dec20e100033148f2fb985077ad25918107840f0dac7",
@@ -105,6 +105,22 @@
       "actor": "human",
       "at": "2026-11-17T07:47:34.414Z",
       "message": "디자인 UX 관점 승인"
+    },
+    {
+      "from": "designed",
+      "to": "in-dev",
+      "transition": "startDev",
+      "actor": "dev",
+      "at": "2026-11-17T07:47:39.889Z",
+      "message": "구현 착수"
+    },
+    {
+      "from": "in-dev",
+      "to": "implemented",
+      "transition": "finishDev",
+      "actor": "dev",
+      "at": "2026-11-17T07:47:39.889Z",
+      "message": "구현 완료"
     }
   ]
 }

@@ -4,16 +4,7 @@
   "id": "TASK-02",
   "status": "verified",
   "reqHash": "52a797da98bc6757dae0e8dfb1d81510c7304be654e6ffd354f3e1efe83ad675",
-  "holds": [
-    {
-      "id": "Q8",
-      "kind": "question",
-      "raisedBy": "audit",
-      "message": "[audit:duplicate:TASK-01,TASK-02] 의미 중복: 액션 아이템 필드 `id`, `title`, `createdAt`의 타입과 형식(ISO 8601 UTC)을 TASK-01과 TASK-02가 각자 같은 표로 정의한다. 한쪽만 고치면 목록 응답과 완료 응답의 필드 정의가 어긋나게 된다.\n근거:\n- TASK-01: \"| `createdAt` | 문자열 | 생성일. ISO 8601 UTC 형식(예: `2026-11-17T06:10:16Z`) |\"\n- TASK-02: \"본문: 완료된 액션 아이템 하나를 나타내는 JSON 객체. 필드는 목록 조회의 요소와 같다.\"\n- TASK-02: \"| `createdAt` | 문자열 | 생성일. ISO 8601 UTC 형식(예: `2026-11-17T06:10:16Z`) |\"\n제안: TASK-02의 완료 응답 필드 표에서 `id`, `title`, `createdAt` 행을 지우고 'TASK-01의 액션 아이템 필드와 같다'로 대신한다. 이 응답에서만 다른 점(`completed`는 항상 `true`)만 남긴다. TASK-02도 이미 '필드는 목록 조회의 요소와 같다'라며 TASK-01을 기준으로 삼고 있으므로, 정의는 TASK-01 한 곳에만 두는 것이 맞다.\n\n고치려면: fsd respec TASK-02 \"<사유>\"   문제가 아니면: fsd answer TASK-02 \"<이유>\"",
-      "at": "2026-11-17T08:23:29.263Z",
-      "artifactHash": null
-    }
-  ],
+  "holds": [],
   "approvedSpecHash": "1bd6123434c298f5a7e0370efd5a6d70f29fce8fb171f6100f01c28dda7757e5",
   "bug": null,
   "decisions": [
@@ -22,6 +13,12 @@
       "answer": "1) a 2) a 3) a 4) a 5) a",
       "reqHash": "52a797da98bc6757dae0e8dfb1d81510c7304be654e6ffd354f3e1efe83ad675",
       "at": "2026-11-17T06:27:31.636Z"
+    },
+    {
+      "question": "[audit:duplicate:TASK-01,TASK-02] 의미 중복: 액션 아이템 필드 `id`, `title`, `createdAt`의 타입과 형식(ISO 8601 UTC)을 TASK-01과 TASK-02가 각자 같은 표로 정의한다. 한쪽만 고치면 목록 응답과 완료 응답의 필드 정의가 어긋나게 된다.\n근거:\n- TASK-01: \"| `createdAt` | 문자열 | 생성일. ISO 8601 UTC 형식(예: `2026-11-17T06:10:16Z`) |\"\n- TASK-02: \"본문: 완료된 액션 아이템 하나를 나타내는 JSON 객체. 필드는 목록 조회의 요소와 같다.\"\n- TASK-02: \"| `createdAt` | 문자열 | 생성일. ISO 8601 UTC 형식(예: `2026-11-17T06:10:16Z`) |\"\n제안: TASK-02의 완료 응답 필드 표에서 `id`, `title`, `createdAt` 행을 지우고 'TASK-01의 액션 아이템 필드와 같다'로 대신한다. 이 응답에서만 다른 점(`completed`는 항상 `true`)만 남긴다. TASK-02도 이미 '필드는 목록 조회의 요소와 같다'라며 TASK-01을 기준으로 삼고 있으므로, 정의는 TASK-01 한 곳에만 두는 것이 맞다.\n\n고치려면: fsd respec TASK-02 \"<사유>\"   문제가 아니면: fsd answer TASK-02 \"<이유>\"",
+      "answer": "문제 아님: TASK-01의 필드 표를 TASK-02와 맞췄으므로 두 정의가 같다. TASK-02는 TASK-01의 응답을 확장하는 의도다.",
+      "reqHash": "52a797da98bc6757dae0e8dfb1d81510c7304be654e6ffd354f3e1efe83ad675",
+      "at": "2026-11-17T08:28:56.126Z"
     }
   ],
   "feedback": [],
@@ -97,6 +94,14 @@
       "actor": "audit",
       "at": "2026-11-17T08:23:29.263Z",
       "message": "질문: [audit:duplicate:TASK-01,TASK-02] 의미 중복: 액션 아이템 필드 `id`, `title`, `createdAt`의 타입과 형식(ISO 8601 UTC)을 TASK-01과 TASK-02가 각자 같은 표로 정의한다. 한쪽만 고치면 목록 응답과 완료 응답의 필드 정의가 어긋나게 된다.\n근거:\n- TASK-01: \"| `createdAt` | 문자열 | 생성일. ISO 8601 UTC 형식(예: `2026-11-17T06:10:16Z`) |\"\n- TASK-02: \"본문: 완료된 액션 아이템 하나를 나타내는 JSON 객체. 필드는 목록 조회의 요소와 같다.\"\n- TASK-02: \"| `createdAt` | 문자열 | 생성일. ISO 8601 UTC 형식(예: `2026-11-17T06:10:16Z`) |\"\n제안: TASK-02의 완료 응답 필드 표에서 `id`, `title`, `createdAt` 행을 지우고 'TASK-01의 액션 아이템 필드와 같다'로 대신한다. 이 응답에서만 다른 점(`completed`는 항상 `true`)만 남긴다. TASK-02도 이미 '필드는 목록 조회의 요소와 같다'라며 TASK-01을 기준으로 삼고 있으므로, 정의는 TASK-01 한 곳에만 두는 것이 맞다.\n\n고치려면: fsd respec TASK-02 \"<사유>\"   문제가 아니면: fsd answer TASK-02 \"<이유>\""
+    },
+    {
+      "from": "verified",
+      "to": "verified",
+      "transition": "answer",
+      "actor": "human",
+      "at": "2026-11-17T08:28:56.126Z",
+      "message": "답변: 문제 아님: TASK-01의 필드 표를 TASK-02와 맞췄으므로 두 정의가 같다. TASK-02는 TASK-01의 응답을 확장하는 의도다."
     }
   ]
 }

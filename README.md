@@ -9,6 +9,8 @@
 요구사항 ──▶ spec ──▶ (design) ──▶ dev ──▶ verify ──▶ 끝
 (파일/Linear)   │         │          │        │
               질문·승인  질문·승인    질문    실패하면 dev로
+                ▲
+                └──── audit: 확정 스펙끼리 어긋나면 지적 → 사람이 respec으로 다시 연다
 ```
 
 [NAVER D2 발표 "자율 그래프 주도 개발"](https://d2.naver.com/helloworld/5976687)의 구조를 바탕으로 만들었다.
@@ -135,7 +137,9 @@ fsd tick spec        # 스펙 초안 또는 질문
 fsd tick design      # 디자인이 필요한 것만. 초안 또는 질문
 fsd tick dev         # 구현. 디자인이 있으면 백엔드·프론트엔드 동시에
 fsd tick verify      # QA가 검사 계획과 E2E를 쓰고, 설정의 명령으로 판정
+fsd tick audit       # 확정된 스펙 전체에서 서로 어긋나는 곳을 찾는다
 fsd status           # "대기 사유"가 있으면 사람 차례
+fsd cost             # 어디에 비용이 들었는지
 ```
 
 할 일이 없는 노드는 에이전트를 부르지 않고 바로 끝난다. 그래서 네 개를 차례로 반복해 돌려도 된다.
@@ -145,6 +149,7 @@ fsd status           # "대기 사유"가 있으면 사람 차례
 | `fsd status`의 대기 사유 | 할 일 |
 |---|---|
 | `질문 대기 Q3(spec)` | `fsd show <ID>`로 읽고 `fsd answer <ID> "<답>"` |
+| `질문 대기 Q8(audit)` | 스펙끼리 어긋난다는 지적. 고치려면 `fsd respec <ID> "<사유>"`, 문제가 아니면 `fsd answer <ID> "<이유>"` |
 | `승인 대기 A5(spec)` | `fsd show <ID>`로 스펙을 읽고 `fsd approve <ID>` 또는 `fsd reject <ID> "<사유>"` |
 | `승인 대기 A7-ui(design)`, `A7-ux(design)` | 디자인을 열어 보고 관점별로 `fsd approve <ID> --ui`, `--ux`. 반려는 `fsd reject <ID> "<지적>" --ui` |
 
@@ -163,11 +168,12 @@ fsd pull [--dry-run]                     Linear의 이슈를 요구사항 파일
 fsd status [--json]                      요구사항별 상태, 세부 단계, 대기 사유
 fsd show <ID>                            요구사항, 결정, 스펙, 디자인, 검사 계획, 버그
 fsd next <spec|design|dev|verify>        노드가 다음에 고를 요구사항 (실행하지 않음)
-fsd tick <spec|design|dev|verify>        노드를 한 사이클 실행 [--agent claude|codex]
+fsd tick <spec|design|dev|verify|audit>  노드를 한 사이클 실행 [--agent claude|codex]
 fsd answer <ID> <답> [질문 번호]          질문에 답한다
 fsd approve <ID> [--ui|--ux]             초안을 승인한다
 fsd reject <ID> <사유> [--ui|--ux]       초안을 반려한다
 fsd respec <ID> <사유>                   확정된 스펙을 다시 연다
+fsd cost [--json]                        에이전트 호출 비용: 전체, 요구사항별, 노드별, 에이전트별
 fsd sync                                 요구사항 파일의 변경만 반영한다 (모든 명령 앞에서 저절로 돈다)
 ```
 
@@ -186,9 +192,12 @@ fsd sync                                 요구사항 파일의 변경만 반영
   },
   "agent":  { "timeoutMs": 900000, "maxTurns": 60 },
   "wip":    { "spec": 3, "design": 3 },
-  "limits": { "rejections": 3, "reworks": 3, "sameFailure": 2 }
+  "limits": { "rejections": 3, "reworks": 3, "sameFailure": 2 },
+  "prices": { "codex": { "inputPer1M": 1.25, "outputPer1M": 10 } }
 }
 ```
+
+`prices`는 비용을 알려 주지 않는 codex의 100만 토큰당 단가다. 위 값은 예시이니 실제 단가를 확인해서 적는다. 없으면 `fsd cost`가 "가격 미설정"으로 보여 준다.
 
 에이전트에게 주는 규칙은 이 저장소의 `skills/*.md`다. 대상 프로젝트에 같은 이름의 `skills/<이름>.md`를 두면 그것을 대신 쓴다.
 

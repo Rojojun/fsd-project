@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-17T08:23:29.263Z",
+  "node": "audit",
+  "id": null,
+  "agent": "claude",
+  "model": "claude-opus-5-5",
+  "outcome": "findings",
+  "usage": {
+    "costUsd": 0.302068,
+    "inputTokens": 30592,
+    "outputTokens": 2867,
+    "turns": 2,
+    "durationMs": 26748
+  }
+}

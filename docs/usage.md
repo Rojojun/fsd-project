@@ -177,6 +177,23 @@ fsd reject UI-01 "줄이 답답해 보인다" --ui        # 느낌으로 적어�
 실패했으면 `fsd tick dev`가 그 버그부터 고치고, 다시 `fsd tick verify`를 돌린다. 이때는 계획을 다시 쓰지 않고 테스트만 돌린다.
 검사 계획은 `fsd show <ID>`로 본다.
 
+### 3.6 감사 (`fsd tick audit`)
+
+확정된 스펙들을 함께 읽고, 하나씩 보면 맞지만 합치면 어긋나는 곳을 찾는다. 요구사항 하나가 아니라 전체를 본다.
+
+- 마지막 검토 뒤로 확정 스펙, 요구사항, 정책이 바뀌었을 때만 돈다. 그대로면 에이전트를 부르지 않는다.
+- 지적은 고칠 요구사항에 질문으로 붙는다. 지적마다 관련 스펙의 원문 인용이 붙어 있고, 인용이 실제로 스펙에 있는지 코드가 대조한다.
+
+```
+$ fsd tick audit
+audit → 지적 1건을 올렸습니다: TASK-01
+- [TASK-01] TASK-02는 GET /tasks 응답 요소에 completed 필드를 항상 넣도록 바꿨는데, TASK-01의 필드 표에는 아직 세 개만 있다.
+
+$ fsd show TASK-01                                  # 근거 인용과 제안
+$ fsd respec TASK-01 "audit 지적대로 필드 표를 맞춘다"   # 받아들인다 → stale → spec 노드가 지적을 반영해 다시 쓴다
+$ fsd answer TASK-01 "TASK-02가 확장하는 것이 의도다"    # 문제 아님 → 같은 지적은 스펙이 바뀌기 전까지 다시 오지 않는다
+```
+
 ## 4. 사람이 할 일
 
 `fsd status`의 "대기 사유"에 무엇이든 있으면 사람 차례다.
@@ -186,6 +203,7 @@ fsd reject UI-01 "줄이 답답해 보인다" --ui        # 느낌으로 적어�
 | `질문 대기 Q3(spec)` | 노드가 결정을 묻는다 | `fsd show <ID>` → `fsd answer <ID> "<답>"` |
 | `승인 대기 A5(spec)` | 스펙 초안 | `fsd show <ID>` → `approve` 또는 `reject "<사유>"` |
 | `승인 대기 A7-ui(design)`, `A7-ux(design)` | 디자인 초안 | `approve --ui`, `approve --ux` 또는 `reject "<지적>" [--ui|--ux]` |
+| `질문 대기 Q8(audit)` | 스펙끼리 어긋난다는 지적 | `fsd show <ID>` → `respec <ID> "<사유>"`(고친다) 또는 `answer <ID> "<이유>"`(문제 아님) |
 
 질문 대기에는 노드가 스스로 멈춘 경우도 있다.
 
@@ -205,7 +223,11 @@ fsd status            # 표
 fsd status --json     # 다른 도구나 에이전트가 읽을 것
 fsd show <ID>         # 요구사항, 결정, 스펙, 디자인, 검사 계획, 버그
 fsd next <노드>       # 그 노드가 다음에 고를 요구사항 (실행하지 않음)
+fsd cost              # 비용: 전체, 요구사항별, 노드별, 에이전트·모델별
+fsd cost --json
 ```
+
+`fsd status`의 "비용" 칸은 그 요구사항에 든 에이전트 호출 비용의 합이다. 요구사항에 묶이지 않은 호출(init, pull, audit)은 `fsd cost`의 "(공통)"에 모인다.
 
 "단계" 열은 상태 안에서 무엇을 기다리는지 보여 준다.
 
@@ -234,6 +256,7 @@ fsd next <노드>       # 그 노드가 다음에 고를 요구사항 (실행하
   "agent":  { "timeoutMs": 900000, "maxTurns": 60 },
   "wip":    { "spec": 3, "design": 3 },
   "limits": { "rejections": 3, "reworks": 3, "sameFailure": 2 },
+  "prices": { "codex": { "inputPer1M": 1.25, "outputPer1M": 10 } },
   "source": { "linear": { "project": "회의 보고" } }
 }
 ```
@@ -246,6 +269,7 @@ fsd next <노드>       # 그 노드가 다음에 고를 요구사항 (실행하
 | `wip` | 사람의 승인을 기다리는 초안이 이만큼 쌓이면 새 초안을 만들지 않는다 |
 | `limits` | 반복 한도. 4장 참고 |
 | `source.linear` | Linear에서 가져올 범위. `fsd init`이 쓴다. `null`이면 요구사항을 파일로 직접 쓴다 |
+| `prices` | 비용을 알려 주지 않는 에이전트(codex)의 100만 토큰당 단가(달러). 키는 모델 이름 또는 에이전트 이름. `fsd cost`가 토큰으로 어림한다 |
 
 Linear를 읽는 역할(`linear-reader`)은 판단이 필요 없는 일이라 작은 모델이 기본이다. 큰 모델로는 살펴보기 한 번에 $1.6이 들었다.
 
@@ -257,7 +281,7 @@ Linear를 읽는 역할(`linear-reader`)은 판단이 필요 없는 일이라 �
 
 ```sh
 # 한 바퀴: 사람을 기다리는 것을 빼고 갈 수 있는 데까지
-for node in spec design dev verify; do node ../../src/cli.ts tick $node; done
+for node in spec design dev verify audit; do fsd tick $node; done
 ```
 
 한 폴더에서 `tick`을 동시에 여러 개 돌리면 안 된다. 같은 요구사항을 두 번 집는 것을 막는 장치가 아직 없다.
@@ -280,4 +304,7 @@ for node in spec design dev verify; do node ../../src/cli.ts tick $node; done
 | Linear 가져오기 (작은 모델) | $0.01 | 15초 |
 | Linear 살펴보기 (`fsd init`, 작은 모델) | $0.03 | 1분 반 |
 
-호출마다 모델, 토큰, 비용이 `.fsd/runs/`에 남는다. 역할에 작은 모델을 지정하면 줄어든다.
+| 감사 (확정 스펙 셋) | $0.3 | 30초 |
+
+호출마다 모델, 토큰, 비용이 `.fsd/runs/`에 남고 `fsd cost`로 모아 본다. 역할에 작은 모델을 지정하면 줄어든다.
+codex는 비용을 알려 주지 않아 토큰만 남는다. `prices`에 100만 토큰당 단가를 적으면 어림해서 더한다(≈로 표시). 위 단가는 예시다. 실제 단가를 확인해서 적는다.

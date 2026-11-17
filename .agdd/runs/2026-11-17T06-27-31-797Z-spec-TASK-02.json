@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-17T06:27:31.797Z",
+  "node": "spec",
+  "id": "TASK-02",
+  "agent": "claude",
+  "model": "claude-fable-5-2",
+  "outcome": "drafted",
+  "usage": {
+    "costUsd": 0.534536,
+    "inputTokens": 25762,
+    "outputTokens": 3059,
+    "turns": 2,
+    "durationMs": 26255
+  }
+}

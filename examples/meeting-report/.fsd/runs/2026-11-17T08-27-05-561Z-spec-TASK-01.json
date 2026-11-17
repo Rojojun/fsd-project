@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-17T08:27:05.561Z",
+  "node": "spec",
+  "id": "TASK-01",
+  "agent": "claude",
+  "model": "claude-opus-5-5",
+  "outcome": "drafted",
+  "usage": {
+    "costUsd": 0.19450060000000002,
+    "inputTokens": 106479,
+    "outputTokens": 2556,
+    "turns": 5,
+    "durationMs": 22408
+  }
+}

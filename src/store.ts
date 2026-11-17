@@ -7,22 +7,41 @@ import type { RequirementState } from './model.ts';
 /** 저장소 안의 경로 규약. 모든 상태는 저장소 안에 있다(SSOT). */
 export const paths = (root: string) => ({
   requirements: join(root, 'requirements'),
+  policies: join(root, 'policies'),
+  skills: join(root, 'skills'),
+  runs: join(root, '.agdd', 'runs'),
   state: join(root, '.agdd', 'state'),
   config: join(root, 'agdd.config.json'),
 });
 
-export type Settings = Config & Readonly<{ limits: Limits }>;
+export type Role = 'spec-writer';
+export type RoleSetting = Readonly<{ agent: string; model?: string }>;
+
+export type Settings = Config & Readonly<{
+  limits: Limits;
+  /** 역할마다 어떤 에이전트(와 모델)를 쓸지 */
+  roles: Readonly<Record<Role, RoleSetting>>;
+  /** 에이전트 호출 한 번의 한도 */
+  agent: Readonly<{ timeoutMs: number; maxTurns: number }>;
+}>;
 
 const DEFAULT_CONFIG: Settings = {
   wip: { spec: 3 },
   limits: { rejections: 3, reworks: 3, sameFailure: 2 },
+  roles: { 'spec-writer': { agent: 'claude' } },
+  agent: { timeoutMs: 600_000, maxTurns: 30 },
 };
 
 export const loadConfig = (root: string): Settings => {
   const file = paths(root).config;
   if (!existsSync(file)) return DEFAULT_CONFIG;
-  const raw = JSON.parse(readFileSync(file, 'utf8')) as { wip?: Partial<Settings['wip']>; limits?: Partial<Limits> };
-  return { wip: { ...DEFAULT_CONFIG.wip, ...raw.wip }, limits: { ...DEFAULT_CONFIG.limits, ...raw.limits } };
+  const raw = JSON.parse(readFileSync(file, 'utf8')) as { [K in keyof Settings]?: Partial<Settings[K]> };
+  return {
+    wip: { ...DEFAULT_CONFIG.wip, ...raw.wip },
+    limits: { ...DEFAULT_CONFIG.limits, ...raw.limits },
+    roles: { ...DEFAULT_CONFIG.roles, ...raw.roles },
+    agent: { ...DEFAULT_CONFIG.agent, ...raw.agent },
+  };
 };
 
 export const loadStates = (root: string): RequirementState[] => {
@@ -41,4 +60,12 @@ export const saveState = (root: string, state: RequirementState) => {
   const file = join(dir, `${state.id}.json`);
   writeFileSync(`${file}.tmp`, JSON.stringify(state, null, 2) + '\n');
   renameSync(`${file}.tmp`, file);
+};
+
+/** 에이전트 호출 기록. 무엇을 얼마에 돌렸는지 남긴다. 상태 판단에는 쓰지 않는다. */
+export const saveRun = (root: string, at: string, record: Readonly<{ node: string; id: string | null; [key: string]: unknown }>) => {
+  const dir = paths(root).runs;
+  mkdirSync(dir, { recursive: true });
+  const name = `${at.replace(/[:.]/g, '-')}-${record.node}-${record.id ?? 'none'}.json`;
+  writeFileSync(join(dir, name), JSON.stringify({ at, ...record }, null, 2) + '\n');
 };

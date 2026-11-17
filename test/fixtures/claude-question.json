@@ -1,0 +1,23 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "num_turns": 3,
+  "total_cost_usd": 0.3410736,
+  "duration_ms": 6360,
+  "structured_output": {
+    "status": "question",
+    "question": "GET /tasks의 생성일 기준 정렬 방향(order)을 오름차순(asc)과 내림차순(desc) 중 무엇으로 할까요? (plan.json의 order 값이 null입니다)",
+    "spec": null
+  },
+  "usage": {
+    "input_tokens": 4,
+    "cache_creation_input_tokens": 40500,
+    "cache_read_input_tokens": 40288,
+    "output_tokens": 450
+  },
+  "modelUsage": {
+    "claude-opus-5-5": {}
+  },
+  "terminal_reason": "completed"
+}

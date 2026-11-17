@@ -1,10 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { specHash, writeSpec } from '../src/spec.ts';
 import { apply } from '../src/transitions.ts';
 import type { RequirementState } from '../src/model.ts';
 
@@ -60,14 +61,36 @@ test('answer는 열린 질문을 닫고 결정을 기록한다', () => {
   assert.equal(s.decisions.at(-1)?.answer, 'desc');
 });
 
+const sampleSpec = {
+  summary: '요약 문장', contract: '계약 내용',
+  acceptance: [{ id: 'AC-1', given: 'g', when: 'w', then: '결과 문장' }],
+  policies: [],
+};
+/** 스펙 초안이 제출된 상태를 만든다: 스펙 파일 + 그 해시에 묶인 승인 대기 */
+const draft = (root: string, id: string) => {
+  writeSpec(root, { id, title: id, priority: 'P1', depends: [], policies: [], deprecated: false, body: 'b', hash: stateOf(root, id).reqHash }, sampleSpec);
+  writeState(root, apply(stateOf(root, id), 'draftSpec', 'spec', { specHash: specHash(root, id)! }, at));
+};
+
 test('approve는 승인 대기 중인 스펙을 확정한다', () => {
   const root = workspace({ 'A-1.md': req('A-1') });
   run(root, 'sync');
-  writeState(root, apply(stateOf(root, 'A-1'), 'draftSpec', 'spec', { specHash: 'spec-h' }, at));
+  draft(root, 'A-1');
   const r = run(root, 'approve', 'A-1');
   assert.equal(r.status, 0, r.stderr);
   assert.equal(stateOf(root, 'A-1').status, 'specified');
-  assert.equal(stateOf(root, 'A-1').approvedSpecHash, 'spec-h');
+  assert.equal(stateOf(root, 'A-1').approvedSpecHash, specHash(root, 'A-1'));
+});
+
+test('초안 제출 뒤 스펙 파일이 바뀌면 approve를 거부한다', () => {
+  const root = workspace({ 'A-1.md': req('A-1') });
+  run(root, 'sync');
+  draft(root, 'A-1');
+  writeFileSync(join(root, 'specs', 'A-1', 'spec.json'), JSON.stringify({ ...sampleSpec, summary: '몰래 바꿈' }));
+  const r = run(root, 'approve', 'A-1');
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /해시/);
+  assert.equal(stateOf(root, 'A-1').status, 'cataloged');
 });
 
 test('규칙에 없는 명령은 이유와 함께 실패하고 상태를 바꾸지 않는다', () => {
@@ -140,4 +163,92 @@ test('반복 한도는 agdd.config.json으로 바꿀 수 있다', () => {
   writeState(root, apply(apply(s, 'draftSpec', 'spec', { specHash: 'h' }, at), 'reject', 'human', { reason: 'r' }, at));
   run(root, 'status');
   assert.equal(stateOf(root, 'A-1').holds[0]?.kind, 'question');
+});
+
+// ── tick: PATH에 가짜 claude/codex 실행 파일을 두고 실제로 프로세스를 띄운다 ──
+
+const fakeBin = (root: string, name: string, stdout: string, exitCode = 0) => {
+  const bin = join(root, '.fake-bin');
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(join(bin, `${name}.out`), stdout);
+  writeFileSync(join(bin, name), `#!/bin/sh\ncat "$(dirname "$0")/${name}.out"\nexit ${exitCode}\n`);
+  chmodSync(join(bin, name), 0o755);
+  return { ...process.env, PATH: `${bin}:${process.env.PATH}` };
+};
+const runEnv = (root: string, env: NodeJS.ProcessEnv, ...args: string[]) =>
+  spawnSync(process.execPath, [cli, ...args], { cwd: root, encoding: 'utf8', env });
+const claudeOut = (structured: unknown) =>
+  JSON.stringify({ type: 'result', subtype: 'success', is_error: false, num_turns: 2, total_cost_usd: 0.05, structured_output: structured, usage: { input_tokens: 10, output_tokens: 5 }, modelUsage: { 'fake-model': {} } });
+const codexOut = (structured: unknown) =>
+  [{ type: 'item.completed', item: { type: 'agent_message', text: JSON.stringify(structured) } }, { type: 'turn.completed', usage: { input_tokens: 10, output_tokens: 5 } }]
+    .map(e => JSON.stringify(e)).join('\n');
+
+test('tick spec: 에이전트가 질문하면 질문 대기가 붙고 실행 기록이 남는다', () => {
+  const root = workspace({ 'A-1.md': req('A-1') });
+  const env = fakeBin(root, 'claude', claudeOut({ status: 'question', questions: ['정렬 방향은?'], spec: null }));
+  const r = runEnv(root, env, 'tick', 'spec');
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /A-1.*정렬 방향은\?/s);
+  assert.equal(stateOf(root, 'A-1').holds[0].message, '정렬 방향은?');
+  const [log] = readdirSync(join(root, '.agdd', 'runs'));
+  const record = JSON.parse(readFileSync(join(root, '.agdd', 'runs', log), 'utf8'));
+  assert.deepEqual([record.node, record.id, record.agent, record.outcome, record.usage.costUsd], ['spec', 'A-1', 'claude', 'question', 0.05]);
+});
+
+test('tick spec --agent codex: 초안이 저장되고 show로 읽은 뒤 approve로 확정한다', () => {
+  const root = workspace({ 'A-1.md': req('A-1') });
+  const env = fakeBin(root, 'codex', codexOut({ status: 'done', questions: [], spec: sampleSpec }));
+  const r = runEnv(root, env, 'tick', 'spec', '--agent', 'codex');
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(stateOf(root, 'A-1').holds[0].kind, 'approval');
+
+  const shown = run(root, 'show', 'A-1').stdout;
+  assert.match(shown, /요약 문장/);
+  assert.match(shown, /AC-1/);
+  assert.match(shown, /승인 대기/);
+
+  assert.equal(run(root, 'approve', 'A-1').status, 0);
+  assert.equal(stateOf(root, 'A-1').status, 'specified');
+});
+
+test('tick spec: 설정의 역할별 에이전트를 쓴다', () => {
+  const root = workspace({ 'A-1.md': req('A-1') });
+  writeFileSync(join(root, 'agdd.config.json'), JSON.stringify({ roles: { 'spec-writer': { agent: 'codex' } } }));
+  const env = fakeBin(root, 'codex', codexOut({ status: 'question', questions: ['Q'], spec: null }));
+  assert.equal(runEnv(root, env, 'tick', 'spec').status, 0);
+  assert.equal(stateOf(root, 'A-1').holds[0].kind, 'question');
+});
+
+test('tick spec: 에이전트가 실패하면 상태를 바꾸지 않고 실패로 끝나며 기록은 남긴다', () => {
+  const root = workspace({ 'A-1.md': req('A-1') });
+  const env = fakeBin(root, 'claude', 'boom', 3);
+  const r = runEnv(root, env, 'tick', 'spec');
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /에이전트 실패/);
+  assert.deepEqual(stateOf(root, 'A-1').holds, []);
+  assert.equal(readdirSync(join(root, '.agdd', 'runs')).length, 1);
+});
+
+test('tick spec: 후보가 없으면 에이전트를 부르지 않고 정상 종료한다', () => {
+  const root = workspace({ 'A-1.md': req('A-1') });
+  const env = fakeBin(root, 'claude', claudeOut({ status: 'question', questions: ['Q'], spec: null }));
+  runEnv(root, env, 'tick', 'spec');
+  const r = runEnv(root, env, 'tick', 'spec');
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /후보가 없습니다/);
+  assert.equal(readdirSync(join(root, '.agdd', 'runs')).length, 1);
+});
+
+test('tick: 모르는 에이전트 이름은 거부한다', () => {
+  const root = workspace({ 'A-1.md': req('A-1') });
+  const r = run(root, 'tick', 'spec', '--agent', 'nope');
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /nope/);
+});
+
+test('요구사항이 인용한 정책 파일이 없으면 중단한다', () => {
+  const root = workspace({ 'A-1.md': req('A-1').replace('priority: P1', 'priority: P1\npolicies: [missing-policy]') });
+  const r = run(root, 'status');
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /missing-policy/);
 });

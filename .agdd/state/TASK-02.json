@@ -1,18 +1,11 @@
 {
+  "designRequired": false,
+  "approvedDesignHash": null,
   "id": "TASK-02",
-  "status": "cataloged",
+  "status": "specified",
   "reqHash": "52a797da98bc6757dae0e8dfb1d81510c7304be654e6ffd354f3e1efe83ad675",
-  "holds": [
-    {
-      "id": "A3",
-      "kind": "approval",
-      "raisedBy": "spec",
-      "message": "스펙 초안 승인 요청",
-      "at": "2026-11-17T06:27:31.797Z",
-      "artifactHash": "1bd6123434c298f5a7e0370efd5a6d70f29fce8fb171f6100f01c28dda7757e5"
-    }
-  ],
-  "approvedSpecHash": null,
+  "holds": [],
+  "approvedSpecHash": "1bd6123434c298f5a7e0370efd5a6d70f29fce8fb171f6100f01c28dda7757e5",
   "bug": null,
   "decisions": [
     {
@@ -55,6 +48,14 @@
       "actor": "spec",
       "at": "2026-11-17T06:27:31.797Z",
       "message": "스펙 초안 제출 → 승인 대기"
+    },
+    {
+      "from": "cataloged",
+      "to": "specified",
+      "transition": "approveSpec",
+      "actor": "human",
+      "at": "2026-11-17T06:50:34.229Z",
+      "message": "스펙 승인"
     }
   ]
 }

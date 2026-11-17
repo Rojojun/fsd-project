@@ -1,18 +1,9 @@
 {
   "id": "TASK-01",
-  "status": "cataloged",
+  "status": "specified",
   "reqHash": "17ae3809838e33ebcefa060609eafde1df0e4688ca59193a72e44663bf07dfde",
-  "holds": [
-    {
-      "id": "A5",
-      "kind": "approval",
-      "raisedBy": "spec",
-      "message": "스펙 초안 승인 요청",
-      "at": "2026-11-17T06:18:12.528Z",
-      "artifactHash": "094c90c6a7cc5718915d2f629a1847fd826face7298ef3e1e25211562ccd580d"
-    }
-  ],
-  "approvedSpecHash": null,
+  "holds": [],
+  "approvedSpecHash": "094c90c6a7cc5718915d2f629a1847fd826face7298ef3e1e25211562ccd580d",
   "bug": null,
   "decisions": [
     {
@@ -77,6 +68,14 @@
       "actor": "spec",
       "at": "2026-11-17T06:18:12.528Z",
       "message": "스펙 초안 제출 → 승인 대기"
+    },
+    {
+      "from": "cataloged",
+      "to": "specified",
+      "transition": "approveSpec",
+      "actor": "human",
+      "at": "2026-11-17T06:21:06.014Z",
+      "message": "스펙 승인"
     }
   ]
 }

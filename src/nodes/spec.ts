@@ -50,8 +50,13 @@ const buildPrompt = (input: SpecTickInput, doc: RequirementDoc, state: Requireme
   ].filter(Boolean).join('\n\n---\n\n');
 };
 
-const joinQuestions = (questions: readonly string[]) =>
-  questions.length === 1 ? questions[0] : questions.map((q, i) => `${i + 1}) ${q}`).join('\n');
+/** 에이전트가 스스로 붙인 번호("1)", "2.", "(3)")는 떼고 다시 붙인다. */
+const unnumbered = (question: string) => question.trim().replace(/^\(?\d+[).]\s*/, '');
+
+const joinQuestions = (questions: readonly string[]) => {
+  const clean = questions.map(unnumbered);
+  return clean.length === 1 ? clean[0] : clean.map((q, i) => `${i + 1}) ${q}`).join('\n');
+};
 
 /** spec 노드의 한 사이클: 후보 하나를 골라 스펙 초안을 받거나 질문을 남긴다. */
 export const tickSpec = async (input: SpecTickInput): Promise<TickResult> => {

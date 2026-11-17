@@ -126,3 +126,9 @@ test('재확정(stale)이면 이전 스펙을, 선행 요구사항이 있으면 
   assert.ok(tasks[0].prompt.includes('A의 확정 스펙'));
   assert.ok(tasks[0].prompt.includes('B의 이전 스펙'));
 });
+
+test('에이전트가 질문에 직접 번호를 붙여도 번호가 두 번 붙지 않는다', async () => {
+  const { agent } = fakeAgent({ output: { status: 'question', questions: ['1) 첫째?', '2. 둘째?', '(3) 셋째?'], spec: null } });
+  const r = await tickSpec({ ...setup([doc('A')], [register('A', 'req-h', at)]), agent });
+  assert.equal(r.state!.holds[0].message, '1) 첫째?\n2) 둘째?\n3) 셋째?');
+});

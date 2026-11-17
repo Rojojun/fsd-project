@@ -20,7 +20,7 @@ export const parseRequirement = (fileName: string, raw: string): ParseResult => 
 
   const front = (parseYaml(match[1]) ?? {}) as Record<string, unknown>;
   const body = match[2].trim();
-  const { id, title, priority, depends = [], policies = [], deprecated = false } = front;
+  const { id, title, priority, depends = [], policies = [], design = null, deprecated = false } = front;
   const expectedId = basename(fileName, '.md');
 
   const errors = [
@@ -32,6 +32,7 @@ export const parseRequirement = (fileName: string, raw: string): ParseResult => 
     isStringList(depends) && depends.includes(String(id)) && 'depends에 자기 자신을 넣을 수 없습니다.',
     !isStringList(policies) && 'policies는 정책 ID 목록이어야 합니다.',
     typeof deprecated !== 'boolean' && 'deprecated는 true/false여야 합니다.',
+    design !== null && typeof design !== 'boolean' && 'design은 true/false여야 합니다.',
     body === '' && '요구사항 본문이 비어 있습니다.',
   ].filter((e): e is string => typeof e === 'string');
 
@@ -44,6 +45,7 @@ export const parseRequirement = (fileName: string, raw: string): ParseResult => 
       priority: priority as Priority,
       depends: depends as string[],
       policies: policies as string[],
+      design: design as boolean | null,
       deprecated: deprecated as boolean,
       body,
       hash: fingerprint(text),

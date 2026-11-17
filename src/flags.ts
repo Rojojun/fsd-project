@@ -46,7 +46,8 @@ const trailingRun = (notes: readonly (string | undefined)[]) => {
 };
 
 // 사람의 답(answer)은 어느 쪽이든 경계다. 사람이 개입했으면 반복 횟수를 다시 센다.
-const SPEC_ROUND = ['register', 'reset', 'invalidate', 'revive', 'respec', 'answer'];
+// 스펙 승인도 경계다. 그 뒤의 반려는 디자인 초안에 대한 것이므로 따로 센다.
+const SPEC_ROUND = ['register', 'reset', 'invalidate', 'revive', 'respec', 'answer', 'approveSpec'];
 const DEV_ROUND = ['approveSpec', 'answer'];
 
 const counters = (state: RequirementState) => {
@@ -66,6 +67,8 @@ const phaseOf = (state: RequirementState, blocked: boolean, rejections: number):
     case 'cataloged':
     case 'stale':
       return blocked ? 'blocked-by-dependency' : rejections > 0 ? 'redraft' : 'ready';
+    case 'specified':
+      return rejections > 0 ? 'redraft' : 'ready';
     case 'in-dev':
       return state.bug ? 'rework' : 'building';
     case 'verified':
@@ -103,6 +106,9 @@ const stuck = (state: RequirementState, limits: Limits): { actor: Actor; questio
   const { rejections, reworks, sameFailureStreak } = counters(state);
   if ((state.status === 'cataloged' || state.status === 'stale') && rejections >= limits.rejections) {
     return { actor: 'spec', question: `스펙 초안이 ${rejections}회 반려되었습니다. 요구사항을 고칠지, 어떤 방향으로 다시 쓸지 알려 주세요.` };
+  }
+  if (state.status === 'specified' && rejections >= limits.rejections) {
+    return { actor: 'design', question: `디자인 초안이 ${rejections}회 반려되었습니다. 어떤 방향으로 다시 그릴지, 스펙을 다시 열지 알려 주세요.` };
   }
   if (state.status !== 'in-dev') return null;
   if (sameFailureStreak >= limits.sameFailure) {

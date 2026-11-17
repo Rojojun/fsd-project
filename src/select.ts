@@ -1,14 +1,19 @@
 import { PRIORITIES, SPEC_DONE } from './model.ts';
 import type { RequirementDoc, RequirementState } from './model.ts';
 
-export type Config = Readonly<{ wip: Readonly<{ spec: number }> }>;
+export type Config = Readonly<{ wip: Readonly<{ spec: number; design: number }> }>;
 export type Pick = { id: string; reason?: undefined } | { id: null; reason: string };
-type PickNode = 'spec' | 'dev' | 'verify';
+export type PickNode = 'spec' | 'design' | 'dev' | 'verify';
 
 /** 노드별 후보 그룹. 앞 그룹이 먼저다. */
 const GROUPS: Record<PickNode, readonly ((s: RequirementState) => boolean)[]> = {
   spec: [s => s.status === 'cataloged' || s.status === 'stale'],
-  dev: [s => s.status === 'in-dev' && s.bug !== null, s => s.status === 'in-dev', s => s.status === 'specified'],
+  design: [s => s.status === 'specified' && s.designRequired],
+  dev: [
+    s => s.status === 'in-dev' && s.bug !== null,
+    s => s.status === 'in-dev',
+    s => s.status === 'designed' || (s.status === 'specified' && !s.designRequired),
+  ],
   verify: [s => s.status === 'implemented'],
 };
 
@@ -18,9 +23,10 @@ export const pickNext = (
   states: readonly RequirementState[],
   config: Config,
 ): Pick => {
-  if (node === 'spec') {
-    const waiting = states.filter(s => s.holds.some(h => h.kind === 'approval' && h.raisedBy === 'spec')).length;
-    if (waiting >= config.wip.spec) return { id: null, reason: `WIP 한도: 승인 대기 스펙 ${waiting}/${config.wip.spec}` };
+  // 사람의 승인을 기다리는 초안이 한도만큼 쌓이면 새 초안을 만들지 않는다.
+  if (node === 'spec' || node === 'design') {
+    const waiting = states.filter(s => s.holds.some(h => h.kind === 'approval' && h.raisedBy === node)).length;
+    if (waiting >= config.wip[node]) return { id: null, reason: `WIP 한도: ${node} 승인 대기 ${waiting}/${config.wip[node]}` };
   }
 
   const docById = new Map(docs.map(d => [d.id, d]));

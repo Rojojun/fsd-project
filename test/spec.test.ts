@@ -7,7 +7,7 @@ import { checkSpecOutput, readSpec, renderSpec, specHash, writeSpec } from '../s
 import type { RequirementDoc } from '../src/model.ts';
 
 const doc: RequirementDoc = {
-  id: 'A-1', title: '목록 조회', priority: 'P0', depends: [], policies: ['newest-first'],
+  id: 'A-1', title: '목록 조회', priority: 'P0', depends: [], policies: ['newest-first'], design: null,
   deprecated: false, body: 'b', hash: 'req-h',
 };
 const spec = {

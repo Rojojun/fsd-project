@@ -12,7 +12,7 @@ import type { RequirementDoc, RequirementState } from '../src/model.ts';
 const at = '2026-11-17T00:00:00Z';
 const usage = { costUsd: 0.1, inputTokens: 10, outputTokens: 5, turns: 2, durationMs: 100 };
 const doc = (id: string, extra: Partial<RequirementDoc> = {}): RequirementDoc => ({
-  id, title: `${id} 제목`, priority: 'P1', depends: [], policies: [], deprecated: false,
+  id, title: `${id} 제목`, priority: 'P1', depends: [], policies: [], design: null, deprecated: false,
   body: `${id} 본문`, hash: 'req-h', ...extra,
 });
 const spec = (policies: { id: string; applied: string }[] = []) => ({
@@ -35,7 +35,7 @@ const setup = (docs: RequirementDoc[], states: RequirementState[], policies: Rec
   root: mkdtempSync(join(tmpdir(), 'agdd-node-')),
   docs, states, policies, at,
   skill: 'SKILL-RULES',
-  config: { wip: { spec: 3 } },
+  config: { wip: { spec: 3, design: 3 } },
   settings: { timeoutMs: 5000, maxTurns: 9 },
 });
 

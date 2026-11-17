@@ -1,10 +1,10 @@
-export const STATUSES = ['cataloged', 'specified', 'in-dev', 'implemented', 'verified', 'stale', 'deprecated'] as const;
+export const STATUSES = ['cataloged', 'specified', 'designed', 'in-dev', 'implemented', 'verified', 'stale', 'deprecated'] as const;
 export type Status = (typeof STATUSES)[number];
 
 /** 승인된 스펙이 있는 상태 */
-export const SPEC_DONE: readonly Status[] = ['specified', 'in-dev', 'implemented', 'verified'];
+export const SPEC_DONE: readonly Status[] = ['specified', 'designed', 'in-dev', 'implemented', 'verified'];
 
-export const NODES = ['spec', 'dev', 'verify', 'audit'] as const;
+export const NODES = ['spec', 'design', 'dev', 'verify', 'audit'] as const;
 export type Node = (typeof NODES)[number];
 export type Actor = Node | 'sync' | 'human';
 
@@ -39,6 +39,9 @@ export type RequirementState = Readonly<{
   reqHash: string;
   holds: readonly Hold[];
   approvedSpecHash: string | null;
+  /** 스펙 승인 때 함께 확정된 값. true면 디자인 승인 전에는 구현할 수 없다. */
+  designRequired: boolean;
+  approvedDesignHash: string | null;
   bug: Bug | null;
   decisions: readonly Decision[];
   feedback: readonly Feedback[];
@@ -55,6 +58,8 @@ export type RequirementDoc = Readonly<{
   priority: Priority;
   depends: readonly string[];
   policies: readonly string[];
+  /** 디자인 필요 여부를 사람이 못박은 값. null이면 spec 노드의 판단을 따른다. */
+  design: boolean | null;
   deprecated: boolean;
   body: string;
   hash: string;

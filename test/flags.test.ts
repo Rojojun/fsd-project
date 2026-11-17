@@ -7,7 +7,7 @@ import type { RequirementDoc, RequirementState } from '../src/model.ts';
 const at = '2026-11-17T00:00:00Z';
 const limits = { rejections: 3, reworks: 3, sameFailure: 2 };
 const doc = (id: string, depends: string[] = []): RequirementDoc => ({
-  id, title: id, priority: 'P1', depends, policies: [], deprecated: false, body: 'b', hash: 'h',
+  id, title: id, priority: 'P1', depends, policies: [], design: null, deprecated: false, body: 'b', hash: 'h',
 });
 const cataloged = (id = 'A') => register(id, 'h', at);
 const drafted = (s = cataloged()) => apply(s, 'draftSpec', 'spec', { specHash: 's' }, at);

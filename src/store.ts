@@ -26,7 +26,7 @@ export type Settings = Config & Readonly<{
 }>;
 
 const DEFAULT_CONFIG: Settings = {
-  wip: { spec: 3 },
+  wip: { spec: 3, design: 3 },
   limits: { rejections: 3, reworks: 3, sameFailure: 2 },
   roles: { 'spec-writer': { agent: 'claude' } },
   agent: { timeoutMs: 600_000, maxTurns: 30 },
@@ -50,7 +50,8 @@ export const loadStates = (root: string): RequirementState[] => {
   return readdirSync(dir)
     .filter(f => f.endsWith('.json'))
     .sort()
-    .map(f => JSON.parse(readFileSync(join(dir, f), 'utf8')) as RequirementState);
+    // 예전 형식의 상태 파일에는 나중에 생긴 항목이 없다. 기본값으로 채운다.
+    .map(f => ({ designRequired: false, approvedDesignHash: null, ...JSON.parse(readFileSync(join(dir, f), 'utf8')) }) as RequirementState);
 };
 
 /** 임시 파일에 쓰고 rename 한다. 중간에 죽어도 상태 파일이 깨지지 않는다. */

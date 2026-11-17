@@ -69,7 +69,7 @@ const sampleSpec = {
 };
 /** 스펙 초안이 제출된 상태를 만든다: 스펙 파일 + 그 해시에 묶인 승인 대기 */
 const draft = (root: string, id: string) => {
-  writeSpec(root, { id, title: id, priority: 'P1', depends: [], policies: [], deprecated: false, body: 'b', hash: stateOf(root, id).reqHash }, sampleSpec);
+  writeSpec(root, { id, title: id, priority: 'P1', depends: [], policies: [], design: null, deprecated: false, body: 'b', hash: stateOf(root, id).reqHash }, sampleSpec);
   writeState(root, apply(stateOf(root, id), 'draftSpec', 'spec', { specHash: specHash(root, id)! }, at));
 };
 

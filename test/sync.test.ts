@@ -6,7 +6,7 @@ import type { RequirementDoc, RequirementState } from '../src/model.ts';
 
 const at = '2026-11-17T00:00:00Z';
 const doc = (id: string, hash: string, extra: Partial<RequirementDoc> = {}): RequirementDoc => ({
-  id, title: id, priority: 'P1', depends: [], policies: [], deprecated: false, body: 'b', hash, ...extra,
+  id, title: id, priority: 'P1', depends: [], policies: [], design: null, deprecated: false, body: 'b', hash, ...extra,
 });
 const specifiedState = (id: string, hash: string): RequirementState => {
   const drafted = apply(register(id, hash, at), 'draftSpec', 'spec', { specHash: 's' }, at);

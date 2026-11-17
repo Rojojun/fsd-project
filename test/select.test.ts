@@ -5,9 +5,9 @@ import { apply, register } from '../src/transitions.ts';
 import type { Priority, RequirementDoc, RequirementState } from '../src/model.ts';
 
 const at = '2026-11-17T00:00:00Z';
-const config = { wip: { spec: 2 } };
+const config = { wip: { spec: 2, design: 2 } };
 const doc = (id: string, priority: Priority = 'P1', depends: string[] = []): RequirementDoc => ({
-  id, title: id, priority, depends, policies: [], deprecated: false, body: 'b', hash: 'h',
+  id, title: id, priority, depends, policies: [], design: null, deprecated: false, body: 'b', hash: 'h',
 });
 const cataloged = (id: string) => register(id, 'h', at);
 const drafted = (id: string) => apply(cataloged(id), 'draftSpec', 'spec', { specHash: 's' }, at);

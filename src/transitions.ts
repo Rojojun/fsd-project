@@ -13,10 +13,12 @@ type Inputs = {
   draftSpec: { specHash: string; message?: string };
   ask: { question: string };
   answer: { answer: string; holdId?: string };
-  approveSpec: { specHash: string };
+  draftDesign: { designHash: string };
+  approveSpec: { specHash: string; needsDesign?: boolean };
+  approveDesign: { designHash: string };
   reject: { reason: string };
   startDev: Record<string, never>;
-  finishDev: { specHash: string };
+  finishDev: { specHash: string; designHash?: string };
   passVerify: Record<string, never>;
   failVerify: { evidence: string };
   respec: { reason: string };
@@ -36,7 +38,7 @@ type Rule<I> = Readonly<{
   note?: (ctx: Ctx<I>) => string;
 }>;
 
-const ALIVE: readonly Status[] = ['cataloged', 'specified', 'in-dev', 'implemented', 'verified', 'stale'];
+const ALIVE: readonly Status[] = ['cataloged', 'specified', 'designed', 'in-dev', 'implemented', 'verified', 'stale'];
 const PRE_SPEC: readonly Status[] = ['cataloged', 'stale'];
 const POST_SPEC = SPEC_DONE;
 
@@ -114,8 +116,29 @@ const RULES: { [N in TransitionName]: Rule<Inputs[N]> } = {
       if (!approval) return '승인 대기 중인 스펙 초안이 없습니다.';
       return approval.artifactHash === input.specHash ? null : '승인하려는 스펙 해시가 제출된 초안과 다릅니다.';
     },
-    effect: ({ state, input }) => ({ holds: without(state, 'approval'), approvedSpecHash: input.specHash }),
-    message: () => '스펙 승인',
+    effect: ({ state, input }) => ({
+      holds: without(state, 'approval'),
+      approvedSpecHash: input.specHash,
+      designRequired: input.needsDesign ?? false,
+      approvedDesignHash: null,
+    }),
+    message: ({ input }) => (input.needsDesign ? '스펙 승인 (디자인 필요)' : '스펙 승인'),
+  },
+  draftDesign: {
+    from: ['specified'], to: 'keep', actors: ['design'],
+    guard: ({ state }) => (state.designRequired ? null : '디자인이 필요한 요구사항이 아닙니다.'),
+    effect: ctx => ({ holds: [...ctx.state.holds, newHold(ctx, 'approval', '디자인 초안 승인 요청', ctx.input.designHash)] }),
+    message: () => '디자인 초안 제출 → 승인 대기',
+  },
+  approveDesign: {
+    from: ['specified'], to: 'designed', actors: ['human'],
+    guard: ({ state, input }) => {
+      const approval = holdsOf(state, 'approval').find(h => h.raisedBy === 'design');
+      if (!approval) return '승인 대기 중인 디자인 초안이 없습니다.';
+      return approval.artifactHash === input.designHash ? null : '승인하려는 디자인 해시가 제출된 초안과 다릅니다.';
+    },
+    effect: ({ state, input }) => ({ holds: without(state, 'approval'), approvedDesignHash: input.designHash }),
+    message: () => '디자인 승인',
   },
   reject: {
     from: ALIVE, to: 'keep', actors: ['human'],
@@ -126,11 +149,21 @@ const RULES: { [N in TransitionName]: Rule<Inputs[N]> } = {
     }),
     message: ({ input }) => `반려: ${input.reason}`,
   },
-  startDev: { from: ['specified'], to: 'in-dev', actors: ['dev'], message: () => '구현 착수' },
+  startDev: {
+    from: ['specified', 'designed'], to: 'in-dev', actors: ['dev'],
+    guard: ({ state }) =>
+      state.status === 'specified' && state.designRequired ? '디자인 승인이 먼저 필요합니다.' : null,
+    message: () => '구현 착수',
+  },
   finishDev: {
     from: ['in-dev'], to: 'implemented', actors: ['dev'],
-    guard: ({ state, input }) =>
-      state.approvedSpecHash === input.specHash ? null : 'Spec Gate: 구현 기준 스펙이 승인된 스펙과 다릅니다.',
+    guard: ({ state, input }) => {
+      if (state.approvedSpecHash !== input.specHash) return 'Spec Gate: 구현 기준 스펙이 승인된 스펙과 다릅니다.';
+      if (state.approvedDesignHash !== null && state.approvedDesignHash !== input.designHash) {
+        return 'Design Gate: 구현 기준 디자인이 승인된 디자인과 다릅니다.';
+      }
+      return null;
+    },
     message: () => '구현 완료',
   },
   passVerify: {
@@ -197,6 +230,8 @@ export const register = (id: string, reqHash: string, at: string): RequirementSt
   reqHash,
   holds: [],
   approvedSpecHash: null,
+  designRequired: false,
+  approvedDesignHash: null,
   bug: null,
   decisions: [],
   feedback: [],

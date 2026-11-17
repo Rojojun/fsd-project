@@ -1,0 +1,9 @@
+{
+  "lastQuery": "Linear MCP의 팀 목록 도구를 한 번 호출하라. 팀 이름이나 내용은 적지 말고, 호출이 성공했는지(ok)와 팀 수(count)만 돌려줘라. 도구가 없거나 실패하면 ok는 false, error에 이유를 적어라.",
+  "perAgentQuery": {},
+  "graftReads": 0,
+  "sourceReads": 0,
+  "savedTokens": 0,
+  "injectedPointers": [],
+  "nudges": 0
+}

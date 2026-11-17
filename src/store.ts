@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Limits } from './flags.ts';
+import type { LinearFilter } from './sources/linear.ts';
 import type { Config } from './select.ts';
 import type { RequirementState } from './model.ts';
 
@@ -15,7 +16,7 @@ export const paths = (root: string) => ({
   config: join(root, 'agdd.config.json'),
 });
 
-export type Role = 'spec-writer' | 'designer' | 'dev' | 'dev-backend' | 'dev-frontend' | 'qa';
+export type Role = 'spec-writer' | 'designer' | 'dev' | 'dev-backend' | 'dev-frontend' | 'qa' | 'linear-reader';
 export type RoleSetting = Readonly<{ agent: string; model?: string }>;
 
 export type Settings = Config & Readonly<{
@@ -26,6 +27,8 @@ export type Settings = Config & Readonly<{
   agent: Readonly<{ timeoutMs: number; maxTurns: number }>;
   /** 대상 프로젝트의 E2E 실행 명령. {id}는 요구사항 ID로 바뀐다. 정하지 않으면 verify를 돌릴 수 없다 */
   verify: Readonly<{ command: string | null; timeoutMs: number }>;
+  /** 요구사항을 어디서 가져오는가. linear가 없으면 requirements/ 에 사람이 직접 쓴다 */
+  source: Readonly<{ linear: LinearFilter | null }>;
 }>;
 
 const DEFAULT_CONFIG: Settings = {
@@ -38,9 +41,11 @@ const DEFAULT_CONFIG: Settings = {
     'dev-backend': { agent: 'claude' },
     'dev-frontend': { agent: 'claude' },
     qa: { agent: 'claude' },
+    'linear-reader': { agent: 'claude' },
   },
   agent: { timeoutMs: 600_000, maxTurns: 30 },
   verify: { command: null, timeoutMs: 600_000 },
+  source: { linear: null },
 };
 
 export const loadConfig = (root: string): Settings => {
@@ -58,6 +63,7 @@ export const loadConfig = (root: string): Settings => {
     } as Settings['roles'],
     agent: { ...DEFAULT_CONFIG.agent, ...raw.agent },
     verify: { ...DEFAULT_CONFIG.verify, ...raw.verify },
+    source: { ...DEFAULT_CONFIG.source, ...raw.source } as Settings['source'],
   };
 };
 

@@ -564,3 +564,68 @@ test('tick verify: 명령이 실패하면 증거와 함께 dev로 되돌리고, 
   assert.match(run(root, 'status').stdout, /in-dev.*rework/);
   assert.match(run(root, 'next', 'dev').stdout, /A-1/);
 });
+
+// ── Linear에서 요구사항 가져오기 ──
+
+const linearIssue = (identifier: string, over: object = {}) => ({
+  identifier, title: `${identifier} 제목`, priority: 2, stateType: 'unstarted', labels: [], blockedBy: [],
+  description: `${identifier} 본문`, url: `https://linear.app/x/issue/${identifier}`, ...over,
+});
+const emptyProject = () => mkdtempSync(join(tmpdir(), 'agdd-'));
+const linearConfig = (root: string) =>
+  writeFileSync(join(root, 'agdd.config.json'), JSON.stringify({ source: { linear: { project: '회의 보고' } } }));
+const linearEnv = (root: string, issues: object[], mcpList = 'linear: https://mcp.linear.app/mcp (HTTP) - ✔ Connected') =>
+  fakeDesigner(root, 'claude', { mcpList, stdout: claudeOut({ issues }) });
+
+test('pull: Linear가 연결되어 있고 범위가 설정되어 있으면 이슈가 요구사항이 된다', () => {
+  const root = emptyProject();
+  linearConfig(root);
+  const r = runEnv(root, linearEnv(root, [linearIssue('ENG-1'), linearIssue('ENG-2', { blockedBy: ['ENG-1'] })]), 'pull');
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /새로 가져옴.*ENG-1.*ENG-2/s);
+  assert.match(argsOf(root, 'claude'), /mcp__linear/);
+
+  const status = run(root, 'status').stdout;
+  assert.match(status, /ENG-1.*P0.*cataloged.*ready/);
+  assert.match(status, /ENG-2.*cataloged.*blocked-by-dependency.*ENG-1/);
+  assert.equal(lastRun(root).node, 'pull');
+});
+
+test('pull: Linear에서 내용이 바뀌면 다음 pull 뒤에 그 요구사항이 다시 스펙 대상이 된다', () => {
+  const root = emptyProject();
+  linearConfig(root);
+  runEnv(root, linearEnv(root, [linearIssue('ENG-1')]), 'pull');
+  run(root, 'sync');
+  draft(root, 'ENG-1');
+  run(root, 'approve', 'ENG-1');
+  assert.equal(stateOf(root, 'ENG-1').status, 'specified');
+
+  const r = runEnv(root, linearEnv(root, [linearIssue('ENG-1', { description: '바뀐 본문' })]), 'pull');
+  assert.match(r.stdout, /바뀜.*ENG-1/s);
+  assert.match(run(root, 'status').stdout, /ENG-1.*stale.*requirement-changed/);
+});
+
+test('pull --dry-run: 파일을 쓰지 않는다', () => {
+  const root = emptyProject();
+  linearConfig(root);
+  const r = runEnv(root, linearEnv(root, [linearIssue('ENG-1')]), 'pull', '--dry-run');
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /ENG-1/);
+  assert.equal(existsSync(join(root, 'requirements')), false);
+});
+
+test('pull: 가져올 범위가 설정에 없으면 안내하고 실패한다', () => {
+  const root = emptyProject();
+  const r = run(root, 'pull');
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /source.*linear/s);
+});
+
+test('pull: Linear가 연결되어 있지 않으면 에이전트를 부르지 않고, 파일로 직접 쓰는 길을 안내한다', () => {
+  const root = emptyProject();
+  linearConfig(root);
+  const r = runEnv(root, linearEnv(root, [linearIssue('ENG-1')], 'linear: https://mcp.linear.app/mcp (HTTP) - ! Needs authentication'), 'pull');
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /Linear.*연결.*requirements/s);
+  assert.equal(existsSync(join(root, '.fake-bin', 'claude.args')), false);
+});

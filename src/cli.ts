@@ -3,6 +3,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { claudeAgent } from './agents/claude.ts';
+import { findServer, listServers } from './agents/mcp.ts';
+import { pullLinear } from './sources/linear.ts';
 import { codexAgent } from './agents/codex.ts';
 import type { Agent } from './agents/types.ts';
 import { loadCatalog } from './catalog.ts';
@@ -28,6 +30,7 @@ import type { Aspect, Hold, RequirementDoc, RequirementState } from './model.ts'
 class UsageError extends Error {}
 
 const USAGE = `사용법: agdd <명령>
+  pull [--dry-run]           Linear의 이슈를 요구사항 파일로 가져온다 (설정에 source.linear가 있을 때)
   status [--json]            요구사항별 상태, 세부 단계, 대기 사유
   sync                       요구사항 파일 변경만 반영
   show <ID>                  요구사항 하나의 상태, 질문, 스펙 초안
@@ -294,13 +297,57 @@ const tick = async (ctx: Ctx, config: Settings, args: string[]) => {
   }
 };
 
+/** 요구사항의 원본이 Linear일 때: 이슈를 requirements/ 로 옮겨 적는다. 그 뒤는 파일을 직접 쓴 것과 같다. */
+const pull = async (root: string, at: string, args: string[]) => {
+  const config = loadConfig(root);
+  const filter = config.source.linear;
+  if (!filter || Object.keys(filter).length === 0) {
+    throw new UsageError(
+      'Linear에서 가져올 범위가 정해져 있지 않습니다. agdd.config.json에 적어 주세요.\n'
+      + '예: { "source": { "linear": { "project": "회의 보고", "states": ["Todo", "In Progress"] } } }\n'
+      + 'team, project, label, states를 쓸 수 있습니다. Linear를 쓰지 않으면 requirements/<ID>.md를 직접 씁니다.',
+    );
+  }
+  const role = config.roles['linear-reader'];
+  const found = findServer(await listServers(role.agent), 'linear');
+  if (!found) {
+    throw new UsageError('Linear MCP 서버가 연결되어 있지 않습니다(인증이 안 된 서버는 연결된 것으로 치지 않습니다).\nLinear를 연결하거나, requirements/<ID>.md를 직접 써 주세요.');
+  }
+  const dryRun = args.includes('--dry-run');
+  const result = await pullLinear({
+    root, filter, dryRun, server: found.server,
+    agent: agentFor(found.agent),
+    settings: { ...config.agent, ...(role.model && found.agent === role.agent ? { model: role.model } : {}) },
+    skill: loadSkill(root, 'linear-reader'),
+  });
+  if (result.run) {
+    const { agent, model, usage } = result.run;
+    saveRun(root, at, { node: 'pull', id: null, agent, model, outcome: result.ok ? 'pulled' : 'failed', usage });
+  }
+  if (!result.ok) throw new UsageError(result.message);
+
+  const line = (label: string, ids: readonly string[]) => (ids.length ? `${label}: ${ids.join(', ')}` : '');
+  console.log([
+    dryRun ? '(--dry-run: 파일을 쓰지 않았습니다)' : '',
+    line('새로 가져옴', result.created),
+    line('바뀜', result.changed),
+    line('그대로', result.unchanged),
+    ...result.skipped.map(s => `건너뜀 ${s.id}: ${s.reason}`),
+    line('이번에 오지 않음(파일은 그대로 둠)', result.missing),
+    result.created.length + result.changed.length + result.unchanged.length === 0 ? '범위에 해당하는 이슈가 없습니다.' : '',
+  ].filter(Boolean).join('\n'));
+};
+
 const main = async (argv: string[]) => {
   const [command = 'status', ...args] = argv;
   const root = resolve(process.env.AGDD_ROOT ?? process.cwd());
   const at = new Date().toISOString();
 
+  // pull은 요구사항 폴더가 아직 없어도 된다. 만드는 쪽이다.
+  if (command === 'pull') return pull(root, at, args);
+
   if (!existsSync(paths(root).requirements)) {
-    throw new UsageError(`requirements 폴더가 없습니다: ${paths(root).requirements}\n요구사항 파일(requirements/<ID>.md)을 먼저 만드세요.`);
+    throw new UsageError(`requirements 폴더가 없습니다: ${paths(root).requirements}\n요구사항 파일(requirements/<ID>.md)을 먼저 만들거나, Linear를 쓴다면 agdd pull로 가져오세요.`);
   }
   const catalog = loadCatalog(paths(root).requirements);
   const missingPolicies = catalog.docs.flatMap(d =>

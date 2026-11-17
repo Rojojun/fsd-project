@@ -1,6 +1,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { execProcess } from './agents/exec.ts';
+import { findServer, listServers } from './agents/mcp.ts';
 import { ASPECTS } from './model.ts';
 import { dirHash } from './spec.ts';
 import type { Aspect } from './model.ts';
@@ -22,18 +23,7 @@ export type SurfaceChoice = Readonly<{
   server: string | null;
 }>;
 
-/** `<에이전트> mcp list` 출력에서 지금 쓸 수 있는 서버 이름만 뽑는다. */
-export const connectedServers = (agent: string, output: string): string[] => {
-  const lines = output.split('\n').map(l => l.trim()).filter(Boolean);
-  if (agent === 'claude') {
-    // "이름: 주소 - ✔ Connected". 인증이 필요하거나 연결에 실패한 서버는 제외한다.
-    return lines.flatMap(l => /^(.+?): .* - ✔ Connected$/.exec(l)?.[1] ?? []);
-  }
-  // codex: 칸이 공백으로 나뉜 표. 켜져 있고 로그인된 서버만.
-  return lines
-    .filter(l => /\benabled\b/.test(l) && !/Not logged in/.test(l))
-    .map(l => l.split(/\s+/)[0]);
-};
+export { connectedServers } from './agents/mcp.ts';
 
 /**
  * 우선순위: penpot → figma → html.
@@ -41,18 +31,10 @@ export const connectedServers = (agent: string, output: string): string[] => {
  * 어느 쪽에도 디자인 도구가 없으면 역할의 에이전트가 무엇이든 claude가 HTML로 그린다.
  */
 export const chooseSurface = async (roleAgent: string, exec: Exec = execProcess): Promise<SurfaceChoice> => {
-  const agents = [...new Set([roleAgent, 'claude'])];
-  const listed = await Promise.all(
-    agents.map(async agent => {
-      const run = await exec(agent, ['mcp', 'list'], { cwd: process.cwd(), timeoutMs: 60_000 });
-      return { agent, servers: connectedServers(agent, run.stdout) };
-    }),
-  );
+  const listed = await listServers(roleAgent, exec);
   for (const surface of ['penpot', 'figma'] as const) {
-    for (const { agent, servers } of listed) {
-      const server = servers.find(name => name.toLowerCase().includes(surface));
-      if (server) return { surface, agent, server };
-    }
+    const found = findServer(listed, surface);
+    if (found) return { surface, ...found };
   }
   return { surface: 'html', agent: 'claude', server: null };
 };

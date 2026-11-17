@@ -47,7 +47,7 @@ const fakeExec = (result: Partial<ExecResult> = {}) => {
   return { exec, calls };
 };
 const setup = () => {
-  const root = mkdtempSync(join(tmpdir(), 'agdd-verify-'));
+  const root = mkdtempSync(join(tmpdir(), 'fsd-verify-'));
   writeSpec(root, doc, spec);
   const hash = specHash(root, 'A')!;
   const specified = apply(apply(register('A', 'req-h', at), 'draftSpec', 'spec', { specHash: hash }, at), 'approveSpec', 'human', { specHash: hash }, at);

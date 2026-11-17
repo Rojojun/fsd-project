@@ -63,7 +63,7 @@ const spec = {
 const design = { summary: '목록 화면', location: 'https://design.penpot.app/#/view/1', screens: [{ name: '목록', description: '항목을 최신순으로 보여 준다', covers: ['AC-1'] }], codified: [] as object[] };
 const done = (override: object = {}) => ({ status: 'done', questions: [], design: { ...design, ...override } });
 const workspace = (html?: string) => {
-  const root = mkdtempSync(join(tmpdir(), 'agdd-design-'));
+  const root = mkdtempSync(join(tmpdir(), 'fsd-design-'));
   if (html !== undefined) {
     mkdirSync(join(root, 'designs', 'A'), { recursive: true });
     writeFileSync(join(root, 'designs', 'A', 'index.html'), html);
@@ -130,7 +130,7 @@ test('사람이 읽을 디자인 요약은 위치와 화면, 다룬 인수 조�
 // ── 디자인 언어와 지적의 명문화 ──
 
 const languageRoot = (files: Record<string, string>) => {
-  const root = mkdtempSync(join(tmpdir(), 'agdd-lang-'));
+  const root = mkdtempSync(join(tmpdir(), 'fsd-lang-'));
   mkdirSync(join(root, 'design'));
   Object.entries(files).forEach(([name, text]) => writeFileSync(join(root, 'design', name), text));
   return root;
@@ -141,7 +141,7 @@ test('디자인 언어는 design/ui.md와 design/ux.md 두 문서다. 없거나 
   assert.deepEqual(missingLanguage(both), []);
   assert.match(both.ui ?? '', /색은 변수로/);
   assert.deepEqual(missingLanguage(readDesignLanguage(languageRoot({ 'ui.md': '# UI\n색은 변수로', 'ux.md': '# UX 기준\n' }))), ['design/ux.md']);
-  assert.deepEqual(missingLanguage(readDesignLanguage(mkdtempSync(join(tmpdir(), 'agdd-lang-')))), ['design/ui.md', 'design/ux.md']);
+  assert.deepEqual(missingLanguage(readDesignLanguage(mkdtempSync(join(tmpdir(), 'fsd-lang-')))), ['design/ui.md', 'design/ux.md']);
 });
 
 test('사람의 지적마다 명문화한 규칙이 있어야 한다', () => {

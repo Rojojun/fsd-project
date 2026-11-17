@@ -60,7 +60,7 @@ const parse = (run: ExecResult, task: AgentTask, durationMs: number): AgentResul
 };
 
 export const codexAgent = (exec: Exec = execProcess): Agent => async task => {
-  const dir = mkdtempSync(join(tmpdir(), 'agdd-codex-'));
+  const dir = mkdtempSync(join(tmpdir(), 'fsd-codex-'));
   const schemaFile = join(dir, 'schema.json');
   writeFileSync(schemaFile, JSON.stringify(task.schema));
   const started = Date.now();

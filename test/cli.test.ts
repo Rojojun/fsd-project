@@ -13,7 +13,7 @@ const cli = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
 const at = '2026-11-17T00:00:00Z';
 
 const workspace = (files: Record<string, string>) => {
-  const root = mkdtempSync(join(tmpdir(), 'agdd-'));
+  const root = mkdtempSync(join(tmpdir(), 'fsd-'));
   mkdirSync(join(root, 'requirements'));
   Object.entries(files).forEach(([name, text]) => writeFileSync(join(root, 'requirements', name), text));
   return root;
@@ -21,9 +21,9 @@ const workspace = (files: Record<string, string>) => {
 const req = (id: string, priority = 'P1') => `---\nid: ${id}\ntitle: ${id} 제목\npriority: ${priority}\n---\n${id} 본문\n`;
 const run = (root: string, ...args: string[]) => spawnSync(process.execPath, [cli, ...args], { cwd: root, encoding: 'utf8' });
 const stateOf = (root: string, id: string): RequirementState =>
-  JSON.parse(readFileSync(join(root, '.agdd', 'state', `${id}.json`), 'utf8'));
+  JSON.parse(readFileSync(join(root, '.fsd', 'state', `${id}.json`), 'utf8'));
 const writeState = (root: string, s: RequirementState) =>
-  writeFileSync(join(root, '.agdd', 'state', `${s.id}.json`), JSON.stringify(s));
+  writeFileSync(join(root, '.fsd', 'state', `${s.id}.json`), JSON.stringify(s));
 
 test('status는 sync 후 요구사항별 상태를 보여 주고 상태 파일을 남긴다', () => {
   const root = workspace({ 'A-1.md': req('A-1', 'P0') });
@@ -38,7 +38,7 @@ test('요구사항 파일 하나라도 잘못되면 아무 상태도 바꾸지 �
   const r = run(root, 'status');
   assert.equal(r.status, 1);
   assert.match(r.stderr, /B-1\.md/);
-  assert.equal(existsSync(join(root, '.agdd', 'state', 'A-1.json')), false);
+  assert.equal(existsSync(join(root, '.fsd', 'state', 'A-1.json')), false);
 });
 
 test('next는 노드가 고를 후보를 보여 준다', () => {
@@ -115,7 +115,7 @@ test('요구사항 파일을 고치면 다음 명령에서 바로 반영된다',
 });
 
 test('requirements 폴더가 없으면 안내와 함께 실패한다', () => {
-  const root = mkdtempSync(join(tmpdir(), 'agdd-'));
+  const root = mkdtempSync(join(tmpdir(), 'fsd-'));
   const r = run(root, 'status');
   assert.equal(r.status, 1);
   assert.match(r.stderr, /requirements/);
@@ -156,9 +156,9 @@ test('반려가 한도에 닿으면 다음 명령에서 질문 대기가 붙어 
   assert.match(s.holds[0].message, /3회 반려/);
 });
 
-test('반복 한도는 agdd.config.json으로 바꿀 수 있다', () => {
+test('반복 한도는 fsd.config.json으로 바꿀 수 있다', () => {
   const root = workspace({ 'A-1.md': req('A-1') });
-  writeFileSync(join(root, 'agdd.config.json'), JSON.stringify({ limits: { rejections: 1 } }));
+  writeFileSync(join(root, 'fsd.config.json'), JSON.stringify({ limits: { rejections: 1 } }));
   run(root, 'sync');
   const s = stateOf(root, 'A-1');
   writeState(root, apply(apply(s, 'draftSpec', 'spec', { specHash: 'h' }, at), 'reject', 'human', { reason: 'r' }, at));
@@ -191,8 +191,8 @@ test('tick spec: 에이전트가 질문하면 질문 대기가 붙고 실행 기
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /A-1.*정렬 방향은\?/s);
   assert.equal(stateOf(root, 'A-1').holds[0].message, '정렬 방향은?');
-  const [log] = readdirSync(join(root, '.agdd', 'runs'));
-  const record = JSON.parse(readFileSync(join(root, '.agdd', 'runs', log), 'utf8'));
+  const [log] = readdirSync(join(root, '.fsd', 'runs'));
+  const record = JSON.parse(readFileSync(join(root, '.fsd', 'runs', log), 'utf8'));
   assert.deepEqual([record.node, record.id, record.agent, record.outcome, record.usage.costUsd], ['spec', 'A-1', 'claude', 'question', 0.05]);
 });
 
@@ -214,7 +214,7 @@ test('tick spec --agent codex: 초안이 저장되고 show로 읽은 뒤 approve
 
 test('tick spec: 설정의 역할별 에이전트를 쓴다', () => {
   const root = workspace({ 'A-1.md': req('A-1') });
-  writeFileSync(join(root, 'agdd.config.json'), JSON.stringify({ roles: { 'spec-writer': { agent: 'codex' } } }));
+  writeFileSync(join(root, 'fsd.config.json'), JSON.stringify({ roles: { 'spec-writer': { agent: 'codex' } } }));
   const env = fakeBin(root, 'codex', codexOut({ status: 'question', questions: ['Q'], spec: null }));
   assert.equal(runEnv(root, env, 'tick', 'spec').status, 0);
   assert.equal(stateOf(root, 'A-1').holds[0].kind, 'question');
@@ -227,7 +227,7 @@ test('tick spec: 에이전트가 실패하면 상태를 바꾸지 않고 실패�
   assert.equal(r.status, 1);
   assert.match(r.stderr, /에이전트 실패/);
   assert.deepEqual(stateOf(root, 'A-1').holds, []);
-  assert.equal(readdirSync(join(root, '.agdd', 'runs')).length, 1);
+  assert.equal(readdirSync(join(root, '.fsd', 'runs')).length, 1);
 });
 
 test('tick spec: 후보가 없으면 에이전트를 부르지 않고 정상 종료한다', () => {
@@ -237,7 +237,7 @@ test('tick spec: 후보가 없으면 에이전트를 부르지 않고 정상 종
   const r = runEnv(root, env, 'tick', 'spec');
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /후보가 없습니다/);
-  assert.equal(readdirSync(join(root, '.agdd', 'runs')).length, 1);
+  assert.equal(readdirSync(join(root, '.fsd', 'runs')).length, 1);
 });
 
 test('tick: 모르는 에이전트 이름은 거부한다', () => {
@@ -299,7 +299,7 @@ const fakeDesigner = (root: string, name: string, opts: { mcpList?: string; stdo
 };
 const argsOf = (root: string, name: string) => readFileSync(join(root, '.fake-bin', `${name}.args`), 'utf8');
 const lastRun = (root: string) => {
-  const dir = join(root, '.agdd', 'runs');
+  const dir = join(root, '.fsd', 'runs');
   return JSON.parse(readFileSync(join(dir, readdirSync(dir).sort().at(-1)!), 'utf8'));
 };
 
@@ -353,7 +353,7 @@ test('tick design: penpot이 연결되어 있으면 penpot에 그리게 하고 �
 
 test('tick design: 역할의 에이전트가 codex여도 디자인 도구가 없으면 claude를 부른다', () => {
   const root = draftedUi();
-  writeFileSync(join(root, 'agdd.config.json'), JSON.stringify({ roles: { designer: { agent: 'codex' } } }));
+  writeFileSync(join(root, 'fsd.config.json'), JSON.stringify({ roles: { designer: { agent: 'codex' } } }));
   run(root, 'approve', 'A-1');
   fakeDesigner(root, 'codex', { mcpList: 'Name  Status\nrea   enabled' });
   const env = fakeDesigner(root, 'claude', { stdout: claudeOut(designOut('x')), drawsHtml: true });
@@ -493,7 +493,7 @@ const qaOut = claudeOut({
 });
 const WRITE_TEST = 'mkdir -p e2e/A-1 && echo "// AC-1" > e2e/A-1/api.test.mjs';
 const verifyConfig = (root: string, command: string) =>
-  writeFileSync(join(root, 'agdd.config.json'), JSON.stringify({ verify: { command } }));
+  writeFileSync(join(root, 'fsd.config.json'), JSON.stringify({ verify: { command } }));
 
 test('tick dev: 디자인이 없는 요구사항은 에이전트 하나가 구현하고 implemented가 된다', () => {
   const root = specifiedApi();
@@ -525,7 +525,7 @@ test('tick dev: 디자인이 있으면 백엔드와 프론트엔드 에이전트
   assert.match(r.stdout, /프론트엔드.*화면을 구현함/s);
   assert.equal(stateOf(root, 'A-1').status, 'implemented');
   assert.deepEqual(readFileSync(join(root, '.fake-bin', 'claude.calls'), 'utf8').trim().split('\n').sort(), ['0', '1']);
-  const nodes = readdirSync(join(root, '.agdd', 'runs')).filter(f => f.includes('-dev-')).map(f => JSON.parse(readFileSync(join(root, '.agdd', 'runs', f), 'utf8')).node).sort();
+  const nodes = readdirSync(join(root, '.fsd', 'runs')).filter(f => f.includes('-dev-')).map(f => JSON.parse(readFileSync(join(root, '.fsd', 'runs', f), 'utf8')).node).sort();
   assert.deepEqual(nodes, ['dev-backend', 'dev-frontend']);
 });
 
@@ -571,9 +571,9 @@ const linearIssue = (identifier: string, over: object = {}) => ({
   identifier, title: `${identifier} 제목`, priority: 2, stateType: 'unstarted', labels: [], blockedBy: [],
   description: `${identifier} 본문`, url: `https://linear.app/x/issue/${identifier}`, ...over,
 });
-const emptyProject = () => mkdtempSync(join(tmpdir(), 'agdd-'));
+const emptyProject = () => mkdtempSync(join(tmpdir(), 'fsd-'));
 const linearConfig = (root: string) =>
-  writeFileSync(join(root, 'agdd.config.json'), JSON.stringify({ source: { linear: { project: '회의 보고' } } }));
+  writeFileSync(join(root, 'fsd.config.json'), JSON.stringify({ source: { linear: { project: '회의 보고' } } }));
 const linearEnv = (root: string, issues: object[], mcpList = 'linear: https://mcp.linear.app/mcp (HTTP) - ✔ Connected') =>
   fakeDesigner(root, 'claude', { mcpList, stdout: claudeOut({ issues }) });
 
@@ -630,7 +630,7 @@ test('pull: Linear가 연결되어 있지 않으면 에이전트를 부르지 �
   assert.equal(existsSync(join(root, '.fake-bin', 'claude.args')), false);
 });
 
-// ── 처음에 묻기: agdd init ──
+// ── 처음에 묻기: fsd init ──
 
 const scopesOut = claudeOut({
   projects: [{ name: '사내 위키', team: '플랫폼', ready: 2 }, { name: '회의 보고', team: '제품', ready: 7 }],
@@ -640,7 +640,7 @@ const CONNECTED = 'linear: https://mcp.linear.app/mcp (HTTP) - ✔ Connected';
 /** 묻는 말에 차례로 답을 넣어 준다 */
 const runInput = (root: string, env: NodeJS.ProcessEnv, input: string, ...args: string[]) =>
   spawnSync(process.execPath, [cli, ...args], { cwd: root, encoding: 'utf8', env, input });
-const sourceOf = (root: string) => JSON.parse(readFileSync(join(root, 'agdd.config.json'), 'utf8')).source;
+const sourceOf = (root: string) => JSON.parse(readFileSync(join(root, 'fsd.config.json'), 'utf8')).source;
 
 test('init: Linear를 쓸지 묻고, 쓰지 않는다고 하면 Linear를 살펴보지 않는다', () => {
   const root = emptyProject();

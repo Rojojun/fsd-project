@@ -5,7 +5,7 @@ import type { LinearFilter, LinearScopes } from './sources/linear.ts';
 /**
  * 처음 한 번 묻는다: 요구사항을 Linear에서 가져올 것인가.
  * Linear가 연결되어 있다고 해서 저절로 쓰지 않는다. 요구사항의 원본을 어디에 둘지는 사람이 정한다.
- * 답은 agdd.config.json에 남고, 다시 묻지 않는다. 바꾸려면 agdd init을 다시 실행한다.
+ * 답은 fsd.config.json에 남고, 다시 묻지 않는다. 바꾸려면 fsd init을 다시 실행한다.
  */
 
 export type Discover = () => Promise<{ ok: true; scopes: LinearScopes } | { ok: false; message: string }>;
@@ -36,7 +36,7 @@ const SHOW_TEAMS = 2;
 const yes = (answer: string) => /^(y|yes|ㅇ|예|네|응)$/i.test(answer.trim());
 
 const save = (root: string, linear: LinearFilter | null) => {
-  const file = join(root, 'agdd.config.json');
+  const file = join(root, 'fsd.config.json');
   const current = existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>) : {};
   const source = { ...(current.source as Record<string, unknown> | undefined), linear };
   writeFileSync(file, JSON.stringify({ ...current, source }, null, 2) + '\n');
@@ -51,13 +51,13 @@ export const runInit = async ({ root, ask, discover, log, preset = {} }: InitInp
   const files = (reason?: string): InitResult => {
     if (reason) log(reason);
     save(root, null);
-    log('요구사항은 requirements/<ID>.md 파일로 직접 씁니다. 나중에 바꾸려면 agdd init을 다시 실행하세요.');
+    log('요구사항은 requirements/<ID>.md 파일로 직접 씁니다. 나중에 바꾸려면 fsd init을 다시 실행하세요.');
     return { linear: null };
   };
   const chosen = (linear: LinearFilter): InitResult => {
     save(root, linear);
     log(`Linear의 ${linear.project ? `프로젝트 "${linear.project}"` : `팀 "${linear.team}"`}에서, 시작 전이거나 진행 중인 이슈를 요구사항으로 가져옵니다.`);
-    log('agdd pull --dry-run 으로 무엇이 들어오는지 먼저 확인하세요.');
+    log('fsd pull --dry-run 으로 무엇이 들어오는지 먼저 확인하세요.');
     return { linear };
   };
 
@@ -84,7 +84,7 @@ export const runInit = async ({ root, ask, discover, log, preset = {} }: InitInp
   if (!anyReady) log('지금은 어느 범위에도 시작 전이거나 진행 중인 이슈가 없습니다. 범위를 골라 두면 이슈가 생겼을 때 가져옵니다.');
   candidates.forEach((c, i) => log(`  ${i + 1}) ${c.label}${i === 0 ? '  ← 추천' : ''}`));
   if (total > candidates.length) {
-    log(`  그 밖에 ${total - candidates.length}개가 더 있습니다. 목록에 없는 것은 agdd init --linear --project "<이름>" (또는 --team)으로 직접 정합니다.`);
+    log(`  그 밖에 ${total - candidates.length}개가 더 있습니다. 목록에 없는 것은 fsd init --linear --project "<이름>" (또는 --team)으로 직접 정합니다.`);
   }
 
   for (let attempt = 0; attempt < TRIES; attempt++) {

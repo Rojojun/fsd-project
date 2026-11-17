@@ -32,7 +32,7 @@ const fakeAgent = (result: { output: unknown } | { reason: 'timeout'; detail: st
   return { agent, tasks };
 };
 const setup = (docs: RequirementDoc[], states: RequirementState[], policies: Record<string, string> = {}) => ({
-  root: mkdtempSync(join(tmpdir(), 'agdd-node-')),
+  root: mkdtempSync(join(tmpdir(), 'fsd-node-')),
   docs, states, policies, at,
   skill: 'SKILL-RULES',
   designLanguageReady: true,

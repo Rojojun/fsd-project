@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node app/server.mjs",
     "e2e": "playwright test",
-    "agdd": "node ../../src/cli.ts"
+    "fsd": "node ../../src/cli.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.65.1"

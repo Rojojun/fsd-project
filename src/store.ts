@@ -11,9 +11,9 @@ export const paths = (root: string) => ({
   policies: join(root, 'policies'),
   design: join(root, 'design'),
   skills: join(root, 'skills'),
-  runs: join(root, '.agdd', 'runs'),
-  state: join(root, '.agdd', 'state'),
-  config: join(root, 'agdd.config.json'),
+  runs: join(root, '.fsd', 'runs'),
+  state: join(root, '.fsd', 'state'),
+  config: join(root, 'fsd.config.json'),
 });
 
 export type Role = 'spec-writer' | 'designer' | 'dev' | 'dev-backend' | 'dev-frontend' | 'qa' | 'linear-reader';

@@ -135,7 +135,7 @@ export const checkQaPlan = (
 };
 
 const planFile = (root: string, id: string) => join(root, e2ePath(id), 'qa-plan.json');
-const metaFile = (root: string, id: string) => join(root, '.agdd', 'qa', `${id}.json`);
+const metaFile = (root: string, id: string) => join(root, '.fsd', 'qa', `${id}.json`);
 
 const writeJson = (file: string, value: unknown) => {
   writeFileSync(`${file}.tmp`, JSON.stringify(value, null, 2) + '\n');
@@ -155,7 +155,7 @@ export const readQaPlan = (root: string, id: string): QaPlan | null =>
 export type QaMeta = Readonly<{ specHash: string | null; designHash: string | null; e2eHash: string | null }>;
 
 export const writeQaMeta = (root: string, id: string, meta: QaMeta) => {
-  mkdirSync(join(root, '.agdd', 'qa'), { recursive: true });
+  mkdirSync(join(root, '.fsd', 'qa'), { recursive: true });
   writeJson(metaFile(root, id), meta);
 };
 

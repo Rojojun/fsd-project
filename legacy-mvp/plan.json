@@ -1,6 +1,0 @@
-{
-  "id": "TASK-01",
-  "requirement": "액션 아이템 목록을 생성일 기준으로 정렬한다.",
-  "order": null,
-  "newestFirst": true
-}

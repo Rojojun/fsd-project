@@ -31,7 +31,7 @@ import type { Aspect, Hold, RequirementDoc, RequirementState } from './model.ts'
 
 class UsageError extends Error {}
 
-const USAGE = `사용법: agdd <명령>
+const USAGE = `사용법: fsd <명령>
   init [--linear [--project 이름|--team 이름]|--no-linear]
                              처음 한 번: 요구사항을 Linear에서 가져올지 정한다
   pull [--dry-run]           Linear의 이슈를 요구사항 파일로 가져온다 (init에서 Linear를 고른 경우)
@@ -251,7 +251,7 @@ const runDev = async (ctx: Ctx, config: Settings, args: string[]): Promise<Ticke
 const runVerify = async (ctx: Ctx, config: Settings, args: string[]): Promise<Ticked> => {
   if (!config.verify.command) {
     throw new UsageError(
-      'E2E 실행 명령이 정해져 있지 않습니다. agdd.config.json에 대상 프로젝트의 테스트 명령을 적어 주세요.\n'
+      'E2E 실행 명령이 정해져 있지 않습니다. fsd.config.json에 대상 프로젝트의 테스트 명령을 적어 주세요.\n'
       + '예: { "verify": { "command": "npm run e2e -- {id}" } }   ({id}는 요구사항 ID로 바뀝니다. 테스트는 e2e/<ID>/에 놓입니다.)',
     );
   }
@@ -291,12 +291,12 @@ const tick = async (ctx: Ctx, config: Settings, args: string[]) => {
 
   switch (result.outcome) {
     case 'idle': return console.log(result.message);
-    case 'question': return console.log(`${node} → ${result.id} 질문 대기\n${result.message}\n\n답하기: agdd answer ${result.id} "<답>"`);
+    case 'question': return console.log(`${node} → ${result.id} 질문 대기\n${result.message}\n\n답하기: fsd answer ${result.id} "<답>"`);
     case 'implemented': return console.log(`${node} → ${result.id} 구현 완료\n${result.message}`);
     case 'verified': return console.log(`${node} → ${result.id} 검증 완료\n${result.message}`);
     case 'failed': return console.log(`${node} → ${result.id} E2E 실패 → dev로 되돌림\n${result.message}`);
     case 'returned': return console.log(`${node} → ${result.id} 이전 단계로 되돌림\n${result.message}`);
-    case 'drafted': return console.log(`${node} → ${result.id} 승인 대기\n${result.message}\n\n읽기: agdd show ${result.id}   승인: agdd approve ${result.id}`);
+    case 'drafted': return console.log(`${node} → ${result.id} 승인 대기\n${result.message}\n\n읽기: fsd show ${result.id}   승인: fsd approve ${result.id}`);
     default: throw new UsageError(`${node} → ${result.id}: ${result.message}`);
   }
 };
@@ -308,7 +308,7 @@ const pull = async (root: string, at: string, args: string[]) => {
   if (!filter || Object.keys(filter).length === 0) {
     throw new UsageError(
       '요구사항을 Linear에서 가져오도록 정해져 있지 않습니다(source.linear가 없음).\n'
-      + 'agdd init 을 실행하면 Linear를 쓸지 묻고, 쓴다면 가져올 범위를 고르게 합니다.\n'
+      + 'fsd init 을 실행하면 Linear를 쓸지 묻고, 쓴다면 가져올 범위를 고르게 합니다.\n'
       + 'Linear를 쓰지 않으면 requirements/<ID>.md를 직접 씁니다.',
     );
   }
@@ -360,7 +360,7 @@ const init = async (root: string, at: string, args: string[]) => {
   const discover = async () => {
     const found = findServer(await listServers(role.agent), 'linear');
     if (!found) {
-      return { ok: false as const, message: 'Linear MCP 서버가 연결되어 있지 않습니다(인증이 안 된 서버는 연결된 것으로 치지 않습니다). Linear를 연결한 뒤 agdd init을 다시 실행하세요.' };
+      return { ok: false as const, message: 'Linear MCP 서버가 연결되어 있지 않습니다(인증이 안 된 서버는 연결된 것으로 치지 않습니다). Linear를 연결한 뒤 fsd init을 다시 실행하세요.' };
     }
     console.log('Linear를 살펴보는 중입니다…');
     const result = await discoverLinear({
@@ -382,7 +382,7 @@ const init = async (root: string, at: string, args: string[]) => {
 
 const main = async (argv: string[]) => {
   const [command = 'status', ...args] = argv;
-  const root = resolve(process.env.AGDD_ROOT ?? process.cwd());
+  const root = resolve(process.env.FSD_ROOT ?? process.cwd());
   const at = new Date().toISOString();
 
   if (command === 'init') return init(root, at, args);
@@ -393,7 +393,7 @@ const main = async (argv: string[]) => {
   if (command === 'pull') return pull(root, at, args);
 
   if (!existsSync(paths(root).requirements)) {
-    throw new UsageError(`requirements 폴더가 없습니다: ${paths(root).requirements}\n요구사항 파일(requirements/<ID>.md)을 먼저 만들거나, Linear를 쓴다면 agdd pull로 가져오세요.`);
+    throw new UsageError(`requirements 폴더가 없습니다: ${paths(root).requirements}\n요구사항 파일(requirements/<ID>.md)을 먼저 만들거나, Linear를 쓴다면 fsd pull로 가져오세요.`);
   }
   const catalog = loadCatalog(paths(root).requirements);
   const missingPolicies = catalog.docs.flatMap(d =>

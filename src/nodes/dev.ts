@@ -63,7 +63,7 @@ const parse = (output: unknown): DevOutput | string => {
 };
 
 /** 구현이 고치면 안 되는 곳. 기준이 되는 문서와 검증 수단이다. */
-const PROTECTED = ['requirements/', 'policies/', 'design/', 'specs/', 'designs/', 'e2e/', '.agdd/'];
+const PROTECTED = ['requirements/', 'policies/', 'design/', 'specs/', 'designs/', 'e2e/', '.fsd/'];
 
 const buildPrompt = (input: DevTickInput, doc: RequirementDoc, state: RequirementState, part: DevPart): string => {
   const { root, docs, skill, partGuides, language } = input;

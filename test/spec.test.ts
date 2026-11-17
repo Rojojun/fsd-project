@@ -72,7 +72,7 @@ test('형식이 아예 다른 출력은 거부한다', () => {
 });
 
 test('스펙 파일을 쓰고 읽으면 같은 내용이고 요구사항 지문을 함께 남긴다', () => {
-  const root = mkdtempSync(join(tmpdir(), 'agdd-spec-'));
+  const root = mkdtempSync(join(tmpdir(), 'fsd-spec-'));
   writeSpec(root, doc, spec);
   const saved = readSpec(root, 'A-1');
   assert.equal(saved?.reqHash, 'req-h');
@@ -80,7 +80,7 @@ test('스펙 파일을 쓰고 읽으면 같은 내용이고 요구사항 지문�
 });
 
 test('스펙 해시는 스펙 폴더의 파일 내용이 바뀌면 달라진다', () => {
-  const root = mkdtempSync(join(tmpdir(), 'agdd-spec-'));
+  const root = mkdtempSync(join(tmpdir(), 'fsd-spec-'));
   assert.equal(specHash(root, 'A-1'), null);
   writeSpec(root, doc, spec);
   const before = specHash(root, 'A-1');

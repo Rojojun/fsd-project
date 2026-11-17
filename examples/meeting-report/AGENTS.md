@@ -1,6 +1,6 @@
 # 회의 보고 시스템
 
-agdd로 개발하는 대상 프로젝트다. 요구사항은 `requirements/`, 확정된 스펙은 `specs/`, 디자인은 `designs/`에 있다.
+fsd로 개발하는 대상 프로젝트다. 요구사항은 `requirements/`, 확정된 스펙은 `specs/`, 디자인은 `designs/`에 있다.
 
 ## 구조와 도구
 

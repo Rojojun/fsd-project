@@ -25,7 +25,7 @@ const output = (location = 'ignored') => ({
 });
 /** 스펙이 승인되어 디자인을 기다리는 작업 폴더 */
 const setup = (prepare: (s: RequirementState) => RequirementState = s => s) => {
-  const root = mkdtempSync(join(tmpdir(), 'agdd-dnode-'));
+  const root = mkdtempSync(join(tmpdir(), 'fsd-dnode-'));
   writeSpec(root, doc, spec);
   const hash = specHash(root, 'A')!;
   const drafted = apply(register('A', 'req-h', at), 'draftSpec', 'spec', { specHash: hash }, at);

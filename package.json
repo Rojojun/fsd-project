@@ -1,11 +1,11 @@
 {
-  "name": "agdd",
+  "name": "proto-fsd",
   "version": "0.1.0",
-  "description": "자율 그래프 주도 개발 CLI",
+  "description": "요구사항을 스펙·디자인·구현·검증으로 옮기는 자율 개발 CLI",
   "scripts": {
     "test": "node --test \"test/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
-    "agdd": "node src/cli.ts"
+    "fsd": "node src/cli.ts"
   },
   "type": "module",
   "dependencies": {
@@ -16,7 +16,8 @@
     "typescript": "^5.9.3"
   },
   "bin": {
-    "agdd": "src/cli.ts"
+    "fsd": "src/cli.ts",
+    "proto-fsd": "src/cli.ts"
   },
   "engines": {
     "node": ">=24"

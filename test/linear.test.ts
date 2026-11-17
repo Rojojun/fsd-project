@@ -69,7 +69,7 @@ const fakeAgent = (reply: { output: unknown } | { reason: 'timeout'; detail: str
   return { agent, tasks };
 };
 const setup = () => ({
-  root: mkdtempSync(join(tmpdir(), 'agdd-linear-')),
+  root: mkdtempSync(join(tmpdir(), 'fsd-linear-')),
   server: 'linear',
   settings: { timeoutMs: 5000, maxTurns: 9 },
   skill: 'READER-RULES',

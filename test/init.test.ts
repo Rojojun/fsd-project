@@ -8,8 +8,8 @@ import { discoverLinear, pullLinear } from '../src/sources/linear.ts';
 import type { Agent, AgentResult, AgentTask } from '../src/agents/types.ts';
 import type { LinearScopes } from '../src/sources/linear.ts';
 
-const root = () => mkdtempSync(join(tmpdir(), 'agdd-init-'));
-const configOf = (dir: string) => JSON.parse(readFileSync(join(dir, 'agdd.config.json'), 'utf8'));
+const root = () => mkdtempSync(join(tmpdir(), 'fsd-init-'));
+const configOf = (dir: string) => JSON.parse(readFileSync(join(dir, 'fsd.config.json'), 'utf8'));
 /** 정해진 답을 차례로 주고, 받은 질문을 기록한다 */
 const answers = (...list: string[]) => {
   const asked: string[] = [];
@@ -80,7 +80,7 @@ test('없는 번호면 다시 묻고, 계속 틀리면 아무것도 바꾸지 �
   const r = await runInit({ root: dir, ask, discover: found, log });
   assert.equal(asked.length, 4);
   assert.equal(r.linear, undefined);
-  assert.equal(existsSync(join(dir, 'agdd.config.json')), false);
+  assert.equal(existsSync(join(dir, 'fsd.config.json')), false);
 });
 
 test('Linear가 연결되어 있지 않으면 이유를 알리고 파일로 쓰는 설정을 남긴다', async () => {
@@ -93,7 +93,7 @@ test('Linear가 연결되어 있지 않으면 이유를 알리고 파일로 쓰�
 
 test('이미 있는 설정의 다른 항목은 그대로 둔다', async () => {
   const dir = root();
-  writeFileSync(join(dir, 'agdd.config.json'), JSON.stringify({ verify: { command: 'npm run e2e' }, source: { linear: { team: '옛 팀' } } }));
+  writeFileSync(join(dir, 'fsd.config.json'), JSON.stringify({ verify: { command: 'npm run e2e' }, source: { linear: { team: '옛 팀' } } }));
   await runInit({ root: dir, ask: answers('y', '1').ask, discover: found, log });
   assert.equal(configOf(dir).verify.command, 'npm run e2e');
   assert.equal(configOf(dir).source.linear.project, '회의 보고');

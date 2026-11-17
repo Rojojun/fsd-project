@@ -1,4 +1,4 @@
-# agdd — 자율 그래프 주도 개발 CLI
+# fsd — 자율 그래프 주도 개발 CLI
 
 요구사항 하나하나를 스펙 → (디자인) → 구현 → 검증으로 옮기는 도구다.
 사람은 요구사항을 쓰고, 질문에 답하고, 초안을 승인한다. 나머지는 노드가 저장소의 상태를 읽고 한 걸음씩 진행한다.
@@ -36,16 +36,16 @@ npx playwright test               # QA가 쓴 E2E 25개
 
 ## 내 프로젝트에서 시작하기
 
-대상 프로젝트의 폴더에서 한다. 아래에서 `agdd`는 `node <이 저장소>/src/cli.ts`다.
+대상 프로젝트의 폴더에서 한다. 아래에서 `fsd`는 `node <이 저장소>/src/cli.ts`다.
 
 1. **`AGENTS.md`를 쓴다.** 프로젝트의 구조, 쓰는 도구, 서버를 띄우는 법, 테스트 쓰는 법. 에이전트가 이것부터 읽는다.
-2. **`agdd init`을 실행한다.** 요구사항을 Linear에서 가져올지 묻는다.
+2. **`fsd init`을 실행한다.** 요구사항을 Linear에서 가져올지 묻는다.
    - 가져온다고 하면 Linear를 살펴보고 범위의 후보(프로젝트, 팀)를 보여 준다. 번호를 고르면 된다.
    - 가져오지 않는다고 하면 `requirements/<ID>.md`를 직접 쓴다.
-3. **`agdd.config.json`에 E2E 실행 명령을 적는다.** 예: `{ "verify": { "command": "npx playwright test e2e/{id}/" } }`
-4. 요구사항을 준비한다: `agdd pull` (Linear) 또는 파일을 직접 쓴다.
-5. 노드를 돌린다: `agdd tick spec` → 질문에 답하고 승인 → `agdd tick dev` → `agdd tick verify`.
-   `agdd status`의 "대기 사유"에 무엇이 있으면 사람 차례다.
+3. **`fsd.config.json`에 E2E 실행 명령을 적는다.** 예: `{ "verify": { "command": "npx playwright test e2e/{id}/" } }`
+4. 요구사항을 준비한다: `fsd pull` (Linear) 또는 파일을 직접 쓴다.
+5. 노드를 돌린다: `fsd tick spec` → 질문에 답하고 승인 → `fsd tick dev` → `fsd tick verify`.
+   `fsd status`의 "대기 사유"에 무엇이 있으면 사람 차례다.
 
 자세한 것은 [docs/usage.md](docs/usage.md)에 있다.
 
@@ -54,17 +54,17 @@ npx playwright test               # QA가 쓴 E2E 25개
 대상 프로젝트의 폴더에서 실행한다.
 
 ```
-agdd init                                처음 한 번: 요구사항을 Linear에서 가져올지 정한다
-agdd pull [--dry-run]                    Linear의 이슈를 요구사항 파일로 가져온다
-agdd status [--json]                     요구사항별 상태, 세부 단계, 기다림
-agdd show <ID>                           요구사항, 결정, 스펙, 디자인, 검사 계획
-agdd next <spec|design|dev|verify>       노드가 다음에 고를 요구사항 (실행하지 않음)
-agdd tick <spec|design|dev|verify>       노드를 한 사이클 실행 [--agent claude|codex]
-agdd answer <ID> <답> [질문 번호]         질문에 답한다
-agdd approve <ID> [--ui|--ux]            초안(스펙 또는 디자인)을 승인한다
-agdd reject <ID> <사유> [--ui|--ux]      초안을 반려한다
-agdd respec <ID> <사유>                  확정된 스펙을 다시 연다
-agdd sync                                요구사항 파일의 변경만 반영한다 (모든 명령 앞에서 저절로 돈다)
+fsd init                                처음 한 번: 요구사항을 Linear에서 가져올지 정한다
+fsd pull [--dry-run]                    Linear의 이슈를 요구사항 파일로 가져온다
+fsd status [--json]                     요구사항별 상태, 세부 단계, 기다림
+fsd show <ID>                           요구사항, 결정, 스펙, 디자인, 검사 계획
+fsd next <spec|design|dev|verify>       노드가 다음에 고를 요구사항 (실행하지 않음)
+fsd tick <spec|design|dev|verify>       노드를 한 사이클 실행 [--agent claude|codex]
+fsd answer <ID> <답> [질문 번호]         질문에 답한다
+fsd approve <ID> [--ui|--ux]            초안(스펙 또는 디자인)을 승인한다
+fsd reject <ID> <사유> [--ui|--ux]      초안을 반려한다
+fsd respec <ID> <사유>                  확정된 스펙을 다시 연다
+fsd sync                                요구사항 파일의 변경만 반영한다 (모든 명령 앞에서 저절로 돈다)
 ```
 
 ## 저장소 구조
@@ -82,21 +82,20 @@ agdd sync                                요구사항 파일의 변경만 반영
 | `skills/` | 역할별 규칙 문서. 어느 모델에나 같은 문서를 준다 |
 | `test/` | 테스트. `npm test` |
 | `examples/meeting-report/` | 예제 대상 프로젝트 |
-| `legacy-mvp/` | 첫 번째 단일 파일 예제 (참고용) |
 
 대상 프로젝트 안에 생기는 것:
 
 | 경로 | 내용 | 누가 쓰나 |
 |---|---|---|
-| `requirements/<ID>.md` | 요구사항 | 사람 (또는 `agdd pull`) |
+| `requirements/<ID>.md` | 요구사항 | 사람 (또는 `fsd pull`) |
 | `policies/<이름>.md` | 요구사항이 근거로 드는 정책 | 사람 |
 | `design/ui.md`, `design/ux.md` | 디자인 언어 | 사람 (승인된 검토 규칙이 쌓인다) |
-| `AGENTS.md`, `agdd.config.json` | 프로젝트의 방식, 설정 | 사람 |
+| `AGENTS.md`, `fsd.config.json` | 프로젝트의 방식, 설정 | 사람 |
 | `specs/<ID>/` | 스펙 | spec 노드 |
 | `designs/<ID>/` | 디자인 | design 노드 |
 | `e2e/<ID>/` | 검사 계획과 E2E 테스트 | verify 노드의 QA |
-| `.agdd/state/` | 요구사항별 상태와 이력 | 도구 |
-| `.agdd/runs/`, `.agdd/notes/`, `.agdd/qa/` | 호출 기록, 인계 메모, 검사 계획의 근거 | 도구 |
+| `.fsd/state/` | 요구사항별 상태와 이력 | 도구 |
+| `.fsd/runs/`, `.fsd/notes/`, `.fsd/qa/` | 호출 기록, 인계 메모, 검사 계획의 근거 | 도구 |
 
 ## 진행 상황
 

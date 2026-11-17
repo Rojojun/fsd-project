@@ -69,7 +69,7 @@ export const tickVerify = async (input: VerifyTickInput): Promise<TickResult> =>
 
   if (fresh && e2eHash(root, doc.id) !== meta.e2eHash) {
     // QA가 쓴 뒤 누군가 테스트를 고쳤다. 고친 테스트로 통과시키지 않는다.
-    const question = `QA가 쓴 뒤에 E2E 테스트(${e2ePath(doc.id)})가 바뀌었습니다. 바뀐 테스트를 인정할지(그러면 .agdd/qa/${doc.id}.json을 지우고 다시 검증), 되돌릴지 알려 주세요.`;
+    const question = `QA가 쓴 뒤에 E2E 테스트(${e2ePath(doc.id)})가 바뀌었습니다. 바뀐 테스트를 인정할지(그러면 .fsd/qa/${doc.id}.json을 지우고 다시 검증), 되돌릴지 알려 주세요.`;
     return { id: doc.id, outcome: 'question', message: question, state: apply(state, 'ask', 'verify', { question }, at) };
   }
 

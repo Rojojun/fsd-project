@@ -42,7 +42,7 @@ const fakeAgent = (reply: Reply, sideEffect: (task: AgentTask) => void = () => {
 
 /** 스펙이 확정된(디자인이 필요하면 디자인까지 확정된) 작업 폴더 */
 const setup = (withDesign: boolean, prepare: (s: RequirementState, root: string) => RequirementState = s => s) => {
-  const root = mkdtempSync(join(tmpdir(), 'agdd-dev-'));
+  const root = mkdtempSync(join(tmpdir(), 'fsd-dev-'));
   writeSpec(root, doc, spec(withDesign));
   const sHash = specHash(root, 'A')!;
   let state = apply(apply(register('A', 'req-h', at), 'draftSpec', 'spec', { specHash: sHash }, at), 'approveSpec', 'human', { specHash: sHash, needsDesign: withDesign }, at);

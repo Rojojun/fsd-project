@@ -34,7 +34,7 @@ const screenPlan = [
   scenario('S-4', { target: 'screen', screen: '목록', covers: [], basis: 'ux', title: '키보드로 완료 버튼을 누른다', file: 'e2e/A/screen.test.mjs' }),
 ];
 const workspace = (files = ['api.test.mjs', 'screen.test.mjs']) => {
-  const root = mkdtempSync(join(tmpdir(), 'agdd-qa-'));
+  const root = mkdtempSync(join(tmpdir(), 'fsd-qa-'));
   mkdirSync(join(root, 'e2e', 'A'), { recursive: true });
   files.forEach(f => writeFileSync(join(root, 'e2e', 'A', f), '// test'));
   return root;

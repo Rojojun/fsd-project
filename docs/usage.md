@@ -18,6 +18,9 @@ npm install                      # 예제의 테스트 도구(Playwright)
 node ../../src/cli.ts status     # 아래에서는 이 명령을 agdd라고 줄여 쓴다
 ```
 
+처음 한 번 `agdd init`을 실행한다. 요구사항을 Linear에서 가져올지 묻고, 답을 `agdd.config.json`에 남긴다.
+설정 파일이 없는 폴더에서 사람이 다른 명령을 먼저 실행해도 같은 것을 한 번 묻는다. 자동 실행에서는 묻지 않는다.
+
 대상 프로젝트에는 다음이 있어야 한다.
 
 | 파일 | 내용 |
@@ -70,10 +73,29 @@ design: false             # 선택. 디자인 필요 여부를 못박는다. 없
 - 폐기하려면 파일을 지우거나 `deprecated: true`를 적는다.
 - 파일을 고치면 다음 명령에서 바로 반영된다. 스펙이 확정되기 전이면 초안을 버리고, 확정된 뒤면 `stale`이 된다.
 
-**Linear에서 가져올 때.** Linear MCP 서버가 연결되어 있고 설정에 가져올 범위가 있으면 Linear가 원본이 된다.
+**Linear에서 가져올 때.** Linear가 연결되어 있다고 저절로 쓰지 않는다. `agdd init`에서 쓴다고 답했을 때만 Linear가 원본이 된다.
+
+```
+$ agdd init
+요구사항을 Linear에서 가져올까요? 가져오지 않으면 requirements/ 폴더에 파일로 직접 씁니다. (y/N) y
+Linear를 살펴보는 중입니다…
+어느 범위의 이슈를 요구사항으로 쓸까요? 시작 전이거나 진행 중인 이슈만 가져옵니다(백로그는 가져오지 않습니다).
+  1) 프로젝트  회의 보고  (팀 제품, 진행할 이슈 7건)  ← 추천
+  2) 프로젝트  사내 위키  (팀 플랫폼, 진행할 이슈 2건)
+  3) 팀 전체   제품  (진행할 이슈 12건)
+번호를 고르세요 (Enter = 1):
+```
+
+- 후보는 진행할 이슈가 많은 순이다. 가져올 이슈가 없는 범위는 보여 주지 않고, 프로젝트는 10개, 팀은 2개까지만 보여 준다.
+  목록에 없는 것은 `agdd init --linear --project "<이름>"`(또는 `--team`)으로 정한다.
+- 후보의 이슈 수는 에이전트가 Linear를 읽어 센 것이라 어림값이다. 고른 뒤 `agdd pull --dry-run`으로 실제로 무엇이 오는지 확인한다.
+- **기본 범위.** 고른 프로젝트(또는 팀)에서 상태의 종류가 시작 전(`unstarted`)이거나 진행 중(`started`)인 이슈만 가져온다.
+  백로그와 분류 전은 아직 하기로 정하지 않은 일이라 가져오지 않는다. 상태의 이름은 팀마다 달라서 종류로 고른다.
+- 묻지 않고 정하려면 `agdd init --no-linear` 또는 `agdd init --linear --project "<이름>"`.
+- 범위를 더 좁히려면 설정을 직접 고친다. `team`, `project`, `label`, `states`(상태의 이름), `stateTypes`(상태의 종류)를 쓸 수 있다.
 
 ```json
-{ "source": { "linear": { "project": "회의 보고", "states": ["Todo", "In Progress"] } } }
+{ "source": { "linear": { "project": "회의 보고", "stateTypes": ["unstarted", "started"] } } }
 ```
 
 ```sh
@@ -223,7 +245,9 @@ agdd next <노드>       # 그 노드가 다음에 고를 요구사항 (실행�
 | `agent` | 에이전트 호출 한 번의 시간과 턴 한도 |
 | `wip` | 사람의 승인을 기다리는 초안이 이만큼 쌓이면 새 초안을 만들지 않는다 |
 | `limits` | 반복 한도. 4장 참고 |
-| `source.linear` | Linear에서 가져올 범위. `team`, `project`, `label`, `states` |
+| `source.linear` | Linear에서 가져올 범위. `agdd init`이 쓴다. `null`이면 요구사항을 파일로 직접 쓴다 |
+
+Linear를 읽는 역할(`linear-reader`)은 판단이 필요 없는 일이라 작은 모델이 기본이다. 큰 모델로는 살펴보기 한 번에 $1.6이 들었다.
 
 에이전트에게 주는 규칙은 `skills/`의 문서다. 대상 프로젝트에 같은 이름의 `skills/<이름>.md`를 두면 그것을 대신 쓴다.
 
@@ -249,5 +273,6 @@ for node in spec design dev verify; do node ../../src/cli.ts tick $node; done
 | 구현 (API 하나) | $0.5 | 40초 |
 | 검사 계획 + E2E 작성 | $0.7 ~ $1.0 | 70 ~ 90초 |
 | Linear 가져오기 (작은 모델) | $0.01 | 15초 |
+| Linear 살펴보기 (`agdd init`, 작은 모델) | $0.03 | 1분 반 |
 
 호출마다 모델, 토큰, 비용이 `.agdd/runs/`에 남는다. 역할에 작은 모델을 지정하면 줄어든다.

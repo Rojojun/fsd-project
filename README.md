@@ -34,11 +34,27 @@ node ../../src/cli.ts show TASK-02
 npx playwright test               # QA가 쓴 E2E 25개
 ```
 
+## 내 프로젝트에서 시작하기
+
+대상 프로젝트의 폴더에서 한다. 아래에서 `agdd`는 `node <이 저장소>/src/cli.ts`다.
+
+1. **`AGENTS.md`를 쓴다.** 프로젝트의 구조, 쓰는 도구, 서버를 띄우는 법, 테스트 쓰는 법. 에이전트가 이것부터 읽는다.
+2. **`agdd init`을 실행한다.** 요구사항을 Linear에서 가져올지 묻는다.
+   - 가져온다고 하면 Linear를 살펴보고 범위의 후보(프로젝트, 팀)를 보여 준다. 번호를 고르면 된다.
+   - 가져오지 않는다고 하면 `requirements/<ID>.md`를 직접 쓴다.
+3. **`agdd.config.json`에 E2E 실행 명령을 적는다.** 예: `{ "verify": { "command": "npx playwright test e2e/{id}/" } }`
+4. 요구사항을 준비한다: `agdd pull` (Linear) 또는 파일을 직접 쓴다.
+5. 노드를 돌린다: `agdd tick spec` → 질문에 답하고 승인 → `agdd tick dev` → `agdd tick verify`.
+   `agdd status`의 "대기 사유"에 무엇이 있으면 사람 차례다.
+
+자세한 것은 [docs/usage.md](docs/usage.md)에 있다.
+
 ## 명령
 
 대상 프로젝트의 폴더에서 실행한다.
 
 ```
+agdd init                                처음 한 번: 요구사항을 Linear에서 가져올지 정한다
 agdd pull [--dry-run]                    Linear의 이슈를 요구사항 파일로 가져온다
 agdd status [--json]                     요구사항별 상태, 세부 단계, 기다림
 agdd show <ID>                           요구사항, 결정, 스펙, 디자인, 검사 계획
@@ -60,7 +76,7 @@ agdd sync                                요구사항 파일의 변경만 반영
 | `src/nodes/` | 노드의 한 사이클: `spec`, `design`, `dev`, `verify` |
 | `src/spec.ts`, `src/design.ts`, `src/qa.ts` | 산출물의 형식과 코드 검사 |
 | `src/agents/` | AI와의 계약(`Agent`)과 어댑터(claude, codex), 연결된 외부 도구 확인 |
-| `src/sources/linear.ts` | Linear 이슈를 요구사항 파일로 옮겨 적기 |
+| `src/init.ts`, `src/sources/linear.ts` | 처음에 묻기, Linear를 살펴보고 이슈를 요구사항 파일로 옮겨 적기 |
 | `src/notes.ts` | 실행 사이의 인계 메모 |
 | `src/cli.ts`, `src/store.ts` | 명령, 설정과 상태 저장 |
 | `skills/` | 역할별 규칙 문서. 어느 모델에나 같은 문서를 준다 |
@@ -89,7 +105,7 @@ agdd sync                                요구사항 파일의 변경만 반영
 - [x] design 노드: 도구 선택(Penpot → Figma → HTML), 디자인 언어, UI·UX 두 관점의 검토, 지적의 명문화
 - [x] dev 노드: 디자인이 있으면 백엔드·프론트엔드 병렬
 - [x] verify 노드: QA 검사 계획의 대조, 설정된 E2E 명령
-- [x] Linear에서 요구사항 가져오기
+- [x] Linear에서 요구사항 가져오기 (처음에 쓸지 묻고, 범위는 후보에서 고른다)
 - [ ] audit 노드, 비용 집계
 - [ ] PR 채널(질문·승인·반려, 화면 캡처), 자동 실행
 

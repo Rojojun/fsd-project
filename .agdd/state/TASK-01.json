@@ -1,0 +1,20 @@
+{
+  "id": "TASK-01",
+  "status": "cataloged",
+  "reqHash": "17ae3809838e33ebcefa060609eafde1df0e4688ca59193a72e44663bf07dfde",
+  "holds": [],
+  "approvedSpecHash": null,
+  "bug": null,
+  "decisions": [],
+  "feedback": [],
+  "history": [
+    {
+      "from": null,
+      "to": "cataloged",
+      "transition": "register",
+      "actor": "sync",
+      "at": "2026-11-17T05:44:32.870Z",
+      "message": "요구사항 등록"
+    }
+  ]
+}

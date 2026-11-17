@@ -1,0 +1,215 @@
+{
+  "summary": "TASK-02의 `POST /tasks/{id}/complete`와 `GET /tasks`의 `completed` 필드를 API로만 검사한다. 테스트마다 `createServer({ tasks })`로 서버를 빈 포트(`listen(0)`)에 띄우고 Playwright `request`로 실제 HTTP 요청을 보낸 뒤 서버를 닫는다. 인수 조건 AC-1~AC-10을 모두 다루고, 경계(비어 있을 때, 하나, 여럿, 없는 ID, 같은 요청 반복, 전부 완료, 아무것도 완료하지 않음)를 각각 확인한다. `npx playwright test e2e/TASK-02/`로 실행해 16개 모두 통과했다(구현 결함은 발견되지 않음). 파일: `e2e/TASK-02/tasks-complete.spec.mjs`(테스트), `e2e/TASK-02/helpers.mjs`(서버 띄우기·요청 도우미). 테스트 폴더 밖은 건드리지 않았다.\n\n'완료된 액션 아이템이 저장되어 있다'는 조건은 스펙에 없는 시드 옵션(`completed: true`)을 쓰지 않고, 완료되지 않은 항목을 넣은 뒤 실제 `POST /tasks/{id}/complete` 요청으로 만든다.\n\n일부러 검사하지 않은 것:\n- 화면·UX·UI 시나리오: 디자인이 '필요 없음'이고 화면이 새로 생기거나 바뀌지 않는다. API만 약속되어 있어 해당하는 UX/UI 기준 항목이 없다.\n- `404` 응답의 본문: 스펙과 사람의 결정이 '정하지 않는다, 상태 코드만 검증'이라고 했다.\n- 요청 본문을 넣어 보낸 경우, 다른 메서드(`GET`/`PUT` 등)로 `/tasks/{id}/complete`를 부른 경우, 특수 문자·퍼센트 인코딩이 든 ID: 스펙이 정하지 않았다.\n- `Content-Type` 헤더: 스펙이 정하지 않았다. 본문이 JSON으로 읽히는지만 확인한다.\n- 네 필드 외의 추가 필드 금지 여부: 스펙이 명시적으로 금지하지 않아 `id`, `title`, `createdAt`, `completed`의 값과 타입만 확인한다(TASK-01 검사와 같은 기준).\n- 완료를 되돌리는 동작, 서버 재시작 뒤의 유지: 스펙에 없다(데이터는 메모리에 둔다).\n- `createdAt`이 같은 항목끼리의 순서: TASK-01에서 정하지 않았다.",
+  "scenarios": [
+    {
+      "id": "S-1",
+      "target": "api",
+      "screen": "",
+      "covers": [
+        "AC-1"
+      ],
+      "basis": "acceptance",
+      "title": "완료되지 않은 a1에 완료를 요청하면 200을 돌려준다",
+      "steps": "1) `id` `\"a1\"`인 완료되지 않은 액션 아이템 한 개를 넣어 서버를 띄운다. 2) `POST /tasks/a1/complete`를 본문 없이 요청한다.",
+      "expected": "상태 코드가 `200`이다.",
+      "file": "e2e/TASK-02/tasks-complete.spec.mjs"
+    },
+    {
+      "id": "S-2",
+      "target": "api",
+      "screen": "",
+      "covers": [
+        "AC-2"
+      ],
+      "basis": "acceptance",
+      "title": "완료 응답 본문은 id, title, createdAt이 그대로이고 completed가 true인 JSON 객체다",
+      "steps": "1) `id` `\"a1\"`, `title` `\"회의록 공유\"`, `createdAt` `\"2026-11-17T06:10:16Z\"`인 완료되지 않은 액션 아이템을 넣어 서버를 띄운다. 2) `POST /tasks/a1/complete`를 요청하고 본문을 JSON으로 읽는다.",
+      "expected": "상태 코드 `200`. 본문은 (배열이 아닌) JSON 객체이고 `id`는 문자열 `\"a1\"`, `title`은 `\"회의록 공유\"`, `createdAt`은 `\"2026-11-17T06:10:16Z\"`, `completed`는 불리언 `true`다.",
+      "file": "e2e/TASK-02/tasks-complete.spec.mjs"
+    },
+    {
+      "id": "S-3",
+      "target": "api",
+      "screen": "",
+      "covers": [
+        "AC-3"
+      ],
+      "basis": "acceptance",
+      "title": "a1을 완료한 뒤 목록을 조회하면 a1의 completed는 true다",
+      "steps": "1) `a1` 한 개만 넣어 서버를 띄우고 `GET /tasks`로 완료 전 상태를 본다. 2) `POST /tasks/a1/complete`를 요청해 `200`을 받는다. 3) `GET /tasks`를 요청한다.",
+      "expected": "완료 전에는 `a1`의 `completed`가 `false`다. 완료 뒤 목록은 `200`이고 요소가 하나이며 `a1`의 `completed`가 `true`다. `title`과 `createdAt`은 저장한 값 그대로다.",
+      "file": "e2e/TASK-02/tasks-complete.spec.mjs"
+    },
+    {
+      "id": "S-4",
+      "target": "api",
+      "screen": "",
+      "covers": [
+        "AC-4"
+      ],
+      "basis": "acceptance",
+      "title": "a1만 완료하면 a2의 completed는 false 그대로다",
+      "steps": "1) 완료되지 않은 `a1`, `a2` 두 개를 넣어 서버를 띄운다. 2) `POST /tasks/a1/complete`를 요청해 `200`을 받는다. 3) `GET /tasks`를 요청한다.",
+      "expected": "배열의 요소가 두 개이고 `a2`의 `completed`는 `false`, `a1`의 `completed`는 `true`다.",
+      "file": "e2e/TASK-02/tasks-complete.spec.mjs"
+    },
+    {
+      "id": "S-5",
+      "target": "api",
+      "screen": "",
+      "covers": [
+        "AC-4"
+      ],
+      "basis": "acceptance",
+      "title": "여럿 가운데 가운데 것 하나만 완료해도 나머지는 모두 false 그대로다",
+      "steps": "1) 완료되지 않은 `a1`, `a2`, `a3` 세 개를 넣어 서버를 띄운다. 2) `POST /tasks/a2/complete`를 요청해 `200`을 받는다. 3) `GET /tasks`를 요청한다.",
+      "expected": "요소가 세 개이고 `a2`만 `completed`가 `true`, `a1`과 `a3`은 `false`다.",
+      "file": "e2e/TASK-02/tasks-complete.spec.mjs"
+    },
+    {
+      "id": "S-6",
+      "target": "api",
+      "screen": "",
+      "covers": [
+        "AC-5"
+      ],
+      "basis": "acceptance",
+      "title": "완료된 것과 완료되지 않은 것이 섞여 있어도 모든 요소에 불리언 completed가 있다",
+      "steps": "1) `a1`, `a2`, `a3` 세 개를 넣어 서버를 띄우고 `POST /tasks/a1/complete`로 `a1`만 완료한다. 2) `GET /tasks`를 요청하고 모든 요소를 하나씩 본다.",
+      "expected": "상태 코드 `200`, 요소 세 개. 모든 요소에 `completed` 필드가 있고 타입이 불리언이다. `id`, `title`, `createdAt`은 문자열이다. 값은 `a1`이 `true`, `a2`와 `a3`이 `false`다.",
+      "file": "e2e/TASK-02/tasks-complete.spec.mjs"
+    },
+    {
+      "id": "S-7",
+      "target": "api",
+      "screen": "",
+      "covers": [
+        "AC-5"
+      ],
+      "basis": "acceptance",
+      "title": "아무것도 완료하지 않았어도 모든 요소에 completed가 false로 들어간다",
+      "steps": "1) 완료되지 않은 `a1`, `a2`를 넣어 서버를 띄운다. 2) 완료 요청 없이 `GET /tasks`를 요청한다.",
+      "expected": "상태 코드 `200`, 요소 두 개, 모든 요소의 `completed`가 불리언 `false`다(필드가 빠지지 않는다).",
+      "file": "e2e/TASK-02/tasks-complete.spec.mjs"
+    },
+    {
+      "id": "S-8",
+      "target": "api",
+      "screen": "",
+      "covers": [
+        "AC-6"
+      ],
+      "basis": "acceptance",
+      "title": "없는 ID none에 완료를 요청하면 404를 돌려주고 다른 액션 아이템은 바뀌지 않는다",
+      "steps": "1) `a1`, `a2`만 넣어 서버를 띄운다(`none`은 없다). 2) `POST /tasks/none/complete`를 요청한다. 3) `GET /tasks`를 요청한다.",
+      "expected": "완료 요청의 상태 코드가 `404`다(본문은 검증하지 않는다). 목록은 여전히 두 개이고 `none`은 없으며 `a1`, `a2`의 `completed`는 모두 `false`다.",
+      "file": "e2e/TASK-02/tasks-complete.spec.mjs"
+    },
+    {
+      "id": "S-9",
+      "target": "api",
+      "screen": "",
+      "covers": [
+        "AC-6"
+      ],
+      "basis": "acceptance",
+      "title": "액션 아이템이 하나도 없을 때도 404를 돌려주고 목록은 빈 배열 그대로다",
+      "steps": "1) 데이터 없이 서버를 띄운다. 2) `POST /tasks/none/complete`를 두 번 연달아 요청한다. 3) `GET /tasks`를 요청한다.",
+      "expected": "두 번 모두 상태 코드 `404`다. 목록은 `200`과 빈 배열 `[]`이다.",
+      "file": "e2e/TASK-02/tasks-complete.spec.mjs"
+    },
+    {
+      "id": "S-10",
+      "target": "api",
+      "screen": "",
+      "covers": [
+        "AC-7"
+      ],
+      "basis": "acceptance",
+      "title": "이미 완료된 a1에 다시 완료를 요청해도 200을 돌려준다",
+      "steps": "1) `a1`을 넣어 서버를 띄우고 `POST /tasks/a1/complete`로 완료해 둔다(`200`). 2) `POST /tasks/a1/complete`를 다시 요청한다.",
+      "expected": "두 번째 요청의 상태 코드가 `200`이다.",
+      "file": "e2e/TASK-02/tasks-complete.spec.mjs"
+    },
+    {
+      "id": "S-11",
+      "target": "api",
+      "screen": "",
+      "covers": [
+        "AC-8"
+      ],
+      "basis": "acceptance",
+      "title": "다시 요청한 응답 본문은 첫 응답 본문과 같은 JSON 객체다",
+      "steps": "1) `a1`, `a2`를 넣어 서버를 띄우고 `POST /tasks/a1/complete`를 요청해 첫 응답 본문을 받아 둔다. 2) 같은 요청을 두 번 더 한다.",
+      "expected": "다시 한 요청은 모두 `200`이고, 본문이 첫 응답 본문과 완전히 같은 JSON 객체다. `completed`는 `true`, `id`는 `\"a1\"`, `title`은 `\"회의록 공유\"`, `createdAt`은 `\"2026-11-17T06:10:16Z\"`다.",
+      "file": "e2e/TASK-02/tasks-complete.spec.mjs"
+    },
+    {
+      "id": "S-12",
+      "target": "api",
+      "screen": "",
+      "covers": [
+        "AC-9"
+      ],
+      "basis": "acceptance",
+      "title": "a1에 완료를 두 번 요청한 뒤에도 목록에서 a1은 완료 상태이고 다른 것은 그대로다",
+      "steps": "1) `a1`, `a2`를 넣어 서버를 띄운다. 2) `POST /tasks/a1/complete`를 두 번 요청한다. 3) `GET /tasks`를 요청한다.",
+      "expected": "상태 코드 `200`. 요소는 여전히 두 개이고(늘거나 줄지 않는다) `a1`의 `completed`는 `true`, `a2`는 `false`다.",
+      "file": "e2e/TASK-02/tasks-complete.spec.mjs"
+    },
+    {
+      "id": "S-13",
+      "target": "api",
+      "screen": "",
+      "covers": [
+        "AC-10"
+      ],
+      "basis": "acceptance",
+      "title": "17일 것만 완료되어 있어도 목록은 17일, 16일, 15일 순서다",
+      "steps": "1) `createdAt`이 `2026-11-15T00:00:00Z`, `2026-11-16T00:00:00Z`, `2026-11-17T00:00:00Z`인 세 개를 넣어 서버를 띄운다. 2) 17일 것만 `POST /tasks/d17/complete`로 완료한다. 3) `GET /tasks`를 요청한다.",
+      "expected": "응답 배열의 `createdAt`이 차례로 `2026-11-17T00:00:00Z`, `2026-11-16T00:00:00Z`, `2026-11-15T00:00:00Z`이다. `id`는 `d17`, `d16`, `d15` 순서이고 `completed`는 차례로 `true`, `false`, `false`다.",
+      "file": "e2e/TASK-02/tasks-complete.spec.mjs"
+    },
+    {
+      "id": "S-14",
+      "target": "api",
+      "screen": "",
+      "covers": [
+        "AC-10"
+      ],
+      "basis": "acceptance",
+      "title": "가장 오래된 것이나 가운데 것을 완료해도 정렬은 createdAt 내림차순 그대로다",
+      "steps": "1) 15·16·17일 세 개를 넣어 서버를 띄우고 15일 것만 완료한 뒤 `GET /tasks`를 요청한다. 2) 같은 세 개를 16일, 17일, 15일 순서로 넣어 새 서버를 띄우고 16일과 15일 것을 완료한 뒤 `GET /tasks`를 요청한다.",
+      "expected": "두 경우 모두 `createdAt`이 17일, 16일, 15일 순서다(완료 여부와 무관). `completed`는 첫 경우 `false, false, true`, 둘째 경우 `false, true, true`다.",
+      "file": "e2e/TASK-02/tasks-complete.spec.mjs"
+    },
+    {
+      "id": "S-15",
+      "target": "api",
+      "screen": "",
+      "covers": [
+        "AC-2",
+        "AC-3"
+      ],
+      "basis": "acceptance",
+      "title": "완료 응답의 객체는 목록 조회에 나오는 그 요소와 같다",
+      "steps": "1) `a1`, `a2`를 넣어 서버를 띄운다. 2) `POST /tasks/a2/complete`를 요청해 본문을 받아 둔다. 3) `GET /tasks`를 요청해 `id`가 `a2`인 요소를 찾는다.",
+      "expected": "완료 응답은 `200`이고, 목록의 `a2` 요소가 완료 응답 본문과 완전히 같다(필드가 목록 조회의 요소와 같다). 그 값은 저장한 `id`, `title`, `createdAt`에 `completed: true`다.",
+      "file": "e2e/TASK-02/tasks-complete.spec.mjs"
+    },
+    {
+      "id": "S-16",
+      "target": "api",
+      "screen": "",
+      "covers": [
+        "AC-3",
+        "AC-5"
+      ],
+      "basis": "acceptance",
+      "title": "저장된 것을 모두 완료하면 모든 요소의 completed가 true다",
+      "steps": "1) `a1`, `a2`, `a3`을 넣어 서버를 띄운다. 2) `a3`, `a1`, `a2` 순서로 각각 `POST /tasks/{id}/complete`를 요청한다. 3) `GET /tasks`를 요청한다.",
+      "expected": "세 완료 요청 모두 `200`이다. 목록은 요소 세 개이고 모든 `completed`가 `true`이며, 순서는 `createdAt` 내림차순(`a1`, `a2`, `a3`) 그대로다.",
+      "file": "e2e/TASK-02/tasks-complete.spec.mjs"
+    }
+  ]
+}

@@ -2,7 +2,7 @@
   "designRequired": false,
   "approvedDesignHash": null,
   "id": "TASK-02",
-  "status": "implemented",
+  "status": "verified",
   "reqHash": "52a797da98bc6757dae0e8dfb1d81510c7304be654e6ffd354f3e1efe83ad675",
   "holds": [],
   "approvedSpecHash": "1bd6123434c298f5a7e0370efd5a6d70f29fce8fb171f6100f01c28dda7757e5",
@@ -72,6 +72,14 @@
       "actor": "dev",
       "at": "2026-11-17T07:09:13.263Z",
       "message": "구현 완료"
+    },
+    {
+      "from": "implemented",
+      "to": "verified",
+      "transition": "passVerify",
+      "actor": "verify",
+      "at": "2026-11-17T07:09:58.367Z",
+      "message": "E2E 통과"
     }
   ]
 }

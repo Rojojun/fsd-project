@@ -9,8 +9,17 @@ Node.js 24 이상이 필요하다. TypeScript를 빌드 없이 실행한다.
 ```sh
 npm install
 npm test
-node src/cli.ts status
 ```
+
+대상 프로젝트의 폴더에서 실행한다. 예제는 `examples/meeting-report/`에 있다.
+
+```sh
+cd examples/meeting-report
+npm install
+node ../../src/cli.ts status
+```
+
+아래 구조 표에서 `requirements/`, `policies/`, `specs/`, `designs/`, `design/`, `e2e/`, `.agdd/`는 대상 프로젝트 안의 경로다.
 
 ## 구조
 
@@ -42,6 +51,7 @@ node src/cli.ts status
 | `specs/<ID>/` | 스펙. 승인은 이 폴더의 해시에 묶인다 |
 | `.agdd/runs/` | 에이전트 호출 기록 (모델, 토큰, 비용) |
 | `src/cli.ts` | 명령 |
+| `examples/meeting-report/` | 예제 대상 프로젝트. 요구사항 둘을 스펙 확정부터 검증 완료까지 진행한 결과가 들어 있다 |
 | `legacy-mvp/` | 첫 번째 단일 파일 예제 (참고용) |
 
 ## 명령

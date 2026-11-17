@@ -30,7 +30,7 @@ export type TickResult = Readonly<{
   run?: AgentResult;
 }>;
 
-const section = (title: string, body: string) => (body.trim() ? `# ${title}\n\n${body.trim()}` : '');
+export const section = (title: string, body: string) => (body.trim() ? `# ${title}\n\n${body.trim()}` : '');
 
 const buildPrompt = (input: SpecTickInput, doc: RequirementDoc, state: RequirementState): string => {
   const { root, docs, skill, policies } = input;
@@ -53,7 +53,7 @@ const buildPrompt = (input: SpecTickInput, doc: RequirementDoc, state: Requireme
 /** 에이전트가 스스로 붙인 번호("1)", "2.", "(3)")는 떼고 다시 붙인다. */
 const unnumbered = (question: string) => question.trim().replace(/^\(?\d+[).]\s*/, '');
 
-const joinQuestions = (questions: readonly string[]) => {
+export const joinQuestions = (questions: readonly string[]) => {
   const clean = questions.map(unnumbered);
   return clean.length === 1 ? clean[0] : clean.map((q, i) => `${i + 1}) ${q}`).join('\n');
 };

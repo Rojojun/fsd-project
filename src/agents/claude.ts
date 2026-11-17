@@ -1,20 +1,26 @@
 import { execProcess } from './exec.ts';
 import type { Agent, AgentResult, AgentTask, Exec, ExecResult, Usage } from './types.ts';
 
-const TOOLS = { 'read-only': 'Read,Glob,Grep', 'workspace-write': 'Read,Glob,Grep,Edit,Write,Bash' };
+const TOOLS = {
+  'read-only': 'Read,Glob,Grep',
+  'write-files': 'Read,Glob,Grep,Edit,Write',
+  'workspace-write': 'Read,Glob,Grep,Edit,Write,Bash',
+};
+/** MCP 도구 이름은 mcp__<서버>__<도구> 꼴이고, 서버 이름의 특수 문자는 _로 바뀐다. */
+const mcpTools = (servers: readonly string[]) => servers.map(s => `mcp__${s.replace(/[^A-Za-z0-9_-]/g, '_')}`);
 
 const args = (task: AgentTask): string[] => [
   '-p', task.prompt,
   '--output-format', 'json',
   '--json-schema', JSON.stringify(task.schema),
   '--max-turns', String(task.maxTurns),
-  '--allowedTools', TOOLS[task.access],
+  '--allowedTools', [TOOLS[task.access], ...mcpTools(task.mcp ?? [])].join(','),
   '--permission-mode', 'dontAsk',
   // 매번 새 세션. 맥락은 저장소에서만 온다.
   '--no-session-persistence',
   // 실행하는 사람의 개인 설정(플러그인, MCP)에 결과가 좌우되지 않게 한다.
-  '--setting-sources', 'project',
-  '--strict-mcp-config',
+  // MCP 서버가 필요한 과제만 예외다. 그 서버는 개인 설정에 있다.
+  ...(task.mcp?.length ? [] : ['--setting-sources', 'project', '--strict-mcp-config']),
   ...(task.model ? ['--model', task.model] : []),
 ];
 

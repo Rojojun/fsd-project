@@ -9,7 +9,10 @@ export type AgentTask = Readonly<{
   /** 결과가 따라야 할 JSON Schema. 모든 속성이 required이고 additionalProperties가 false여야 한다(codex 요구). */
   schema: object;
   cwd: string;
-  access: 'read-only' | 'workspace-write';
+  /** read-only: 읽기만. write-files: 파일 편집까지(셸 없음). workspace-write: 셸 실행까지. */
+  access: 'read-only' | 'write-files' | 'workspace-write';
+  /** 이 과제에 필요한 MCP 서버 이름. 있으면 실행하는 사람의 MCP 설정을 쓴다. */
+  mcp?: readonly string[];
   timeoutMs: number;
   maxTurns: number;
   model?: string;

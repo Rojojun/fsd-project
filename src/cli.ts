@@ -6,10 +6,14 @@ import { claudeAgent } from './agents/claude.ts';
 import { codexAgent } from './agents/codex.ts';
 import type { Agent } from './agents/types.ts';
 import { loadCatalog } from './catalog.ts';
+import { chooseSurface, designHash, readDesign, renderDesign } from './design.ts';
 import { escalate, flagsOf } from './flags.ts';
 import type { Flags } from './flags.ts';
+import { tickDesign } from './nodes/design.ts';
 import { tickSpec } from './nodes/spec.ts';
+import type { TickResult } from './nodes/spec.ts';
 import { pickNext } from './select.ts';
+import type { PickNode } from './select.ts';
 import { readSpec, renderSpec, specHash } from './spec.ts';
 import { loadConfig, loadStates, paths, saveRun, saveState } from './store.ts';
 import type { Settings } from './store.ts';
@@ -23,11 +27,11 @@ const USAGE = `사용법: agdd <명령>
   status [--json]            요구사항별 상태, 세부 단계, 대기 사유
   sync                       요구사항 파일 변경만 반영
   show <ID>                  요구사항 하나의 상태, 질문, 스펙 초안
-  next <spec|dev|verify>     노드가 다음에 고를 후보 (실행하지 않음)
-  tick spec [--agent 이름]   spec 노드를 한 사이클 실행 (claude | codex)
+  next <spec|design|dev|verify>  노드가 다음에 고를 후보 (실행하지 않음)
+  tick <spec|design> [--agent 이름]  노드를 한 사이클 실행 (claude | codex)
   answer <ID> <답> [Q번호]   열린 질문에 답한다
-  approve <ID>               승인 대기 중인 스펙을 확정한다
-  reject <ID> <사유>         승인 대기 중인 스펙을 반려한다
+  approve <ID>               승인 대기 중인 초안(스펙 또는 디자인)을 확정한다
+  reject <ID> <사유>         승인 대기 중인 초안을 반려한다
   respec <ID> <사유>         확정된 스펙을 다시 연다`;
 
 type Ctx = Readonly<{ root: string; docs: readonly RequirementDoc[]; states: readonly RequirementState[]; at: string }>;
@@ -97,9 +101,14 @@ const humanCommands: Record<string, (ctx: Ctx, args: string[]) => RequirementSta
   answer: (ctx, [id, answer, holdId]) =>
     apply(find(ctx, id), 'answer', 'human', { answer: need(answer, '답'), holdId }, ctx.at),
   approve: (ctx, [id]) => {
-    // 지금 디스크에 있는 스펙을 승인한다. 초안 제출 뒤 파일이 바뀌었으면 해시가 달라 거부된다.
+    // 지금 디스크에 있는 초안을 승인한다. 초안 제출 뒤 파일이 바뀌었으면 해시가 달라 거부된다.
     const s = find(ctx, id);
-    return apply(s, 'approveSpec', 'human', { specHash: specHash(ctx.root, s.id) ?? '' }, ctx.at);
+    if (s.holds.some(h => h.kind === 'approval' && h.raisedBy === 'design')) {
+      return apply(s, 'approveDesign', 'human', { designHash: designHash(ctx.root, s.id) ?? '' }, ctx.at);
+    }
+    // 디자인 필요 여부: 사람이 요구사항 머리말에 못박았으면 그 값, 아니면 spec 노드의 판단.
+    const needsDesign = ctx.docs.find(d => d.id === s.id)?.design ?? readSpec(ctx.root, s.id)?.design?.needed ?? false;
+    return apply(s, 'approveSpec', 'human', { specHash: specHash(ctx.root, s.id) ?? '', needsDesign }, ctx.at);
   },
   reject: (ctx, [id, reason]) => apply(find(ctx, id), 'reject', 'human', { reason: need(reason, '사유') }, ctx.at),
   respec: (ctx, [id, reason]) => apply(find(ctx, id), 'respec', 'human', { reason: need(reason, '사유') }, ctx.at),
@@ -124,6 +133,9 @@ const show = (ctx: Ctx, id: string | undefined) => {
   const spec = readSpec(ctx.root, s.id);
   const hash = specHash(ctx.root, s.id);
   const specTitle = hash && hash === s.approvedSpecHash ? '확정 스펙' : '스펙 초안 (미승인)';
+  const design = readDesign(ctx.root, s.id);
+  const dHash = designHash(ctx.root, s.id);
+  const designTitle = dHash && dHash === s.approvedDesignHash ? '확정 디자인' : '디자인 초안 (미승인)';
   return [
     `# ${s.id} ${doc?.title ?? ''}`,
     `상태: ${s.status} · ${phaseLabel(flagsOf(s, doc, ctx.states))}`,
@@ -131,36 +143,75 @@ const show = (ctx: Ctx, id: string | undefined) => {
     doc ? `## 요구사항\n\n${doc.body}` : '',
     s.decisions.length ? `## 내린 결정\n\n${s.decisions.map(d => `- ${d.question}\n  → ${d.answer}`).join('\n')}` : '',
     spec ? `---\n${specTitle}\n\n${renderSpec(spec)}` : '',
+    design ? `---\n${designTitle}\n\n${renderDesign(design)}` : '',
   ].filter(Boolean).join('\n\n');
 };
 
-const tick = async (ctx: Ctx, config: Settings, args: string[]) => {
-  if (args[0] !== 'spec') throw new UsageError(`아직 tick은 spec만 됩니다.\n\n${USAGE}`);
-  const role = config.roles['spec-writer'];
-  const agentName = option(args, '--agent') ?? role.agent;
-  const makeAgent = AGENTS[agentName];
-  if (!makeAgent) throw new UsageError(`모르는 에이전트: ${agentName} (가능: ${Object.keys(AGENTS).join(', ')})`);
+const agentFor = (name: string): Agent => {
+  const make = AGENTS[name];
+  if (!make) throw new UsageError(`모르는 에이전트: ${name} (가능: ${Object.keys(AGENTS).join(', ')})`);
+  return make();
+};
 
+type Ticked = Readonly<{ result: TickResult; extra?: Record<string, unknown> }>;
+
+const runSpec = async (ctx: Ctx, config: Settings, args: string[]): Promise<Ticked> => {
+  const role = config.roles['spec-writer'];
   const policyIds = [...new Set(ctx.docs.flatMap(d => d.policies))];
   const result = await tickSpec({
     root: ctx.root, docs: ctx.docs, states: ctx.states, config, at: ctx.at,
-    agent: makeAgent(),
+    agent: agentFor(option(args, '--agent') ?? role.agent),
     settings: { ...config.agent, ...(role.model ? { model: role.model } : {}) },
     skill: loadSkill(ctx.root, 'spec-writer'),
     policies: Object.fromEntries(policyIds.map(id => [id, readFileSync(policyFile(ctx.root, id), 'utf8')])),
   });
+  return { result };
+};
+
+const runDesign = async (ctx: Ctx, config: Settings, args: string[]): Promise<Ticked> => {
+  // 디자인이 필요한 요구사항이 없으면 도구 확인도 에이전트 호출도 하지 않는다.
+  const pick = pickNext('design', ctx.docs, ctx.states, config);
+  if (pick.id === null) return { result: { id: null, outcome: 'idle', message: pick.reason } };
+
+  const role = config.roles.designer;
+  const roleAgent = option(args, '--agent') ?? role.agent;
+  agentFor(roleAgent);
+  // 연결된 디자인 도구를 지금 확인해서 고른다: penpot → figma → 없으면 claude가 HTML로.
+  const choice = await chooseSurface(roleAgent);
+  const result = await tickDesign({
+    root: ctx.root, docs: ctx.docs, states: ctx.states, config, at: ctx.at,
+    agent: agentFor(choice.agent),
+    surface: choice.surface,
+    server: choice.server,
+    settings: { ...config.agent, ...(role.model && choice.agent === role.agent ? { model: role.model } : {}) },
+    skill: loadSkill(ctx.root, 'designer'),
+    surfaceGuide: loadSkill(ctx.root, `design-${choice.surface}`),
+  });
+  return { result, extra: { surface: choice.surface } };
+};
+
+const TICKS: Readonly<Record<string, (ctx: Ctx, config: Settings, args: string[]) => Promise<Ticked>>> = {
+  spec: runSpec,
+  design: runDesign,
+};
+
+const tick = async (ctx: Ctx, config: Settings, args: string[]) => {
+  const node = args[0];
+  const runNode = TICKS[node];
+  if (!runNode) throw new UsageError(`tick은 ${Object.keys(TICKS).join(', ')}만 됩니다.\n\n${USAGE}`);
+  const { result, extra } = await runNode(ctx, config, args);
 
   if (result.run) {
     const { agent, model, usage } = result.run;
-    saveRun(ctx.root, ctx.at, { node: 'spec', id: result.id, agent, model, outcome: result.outcome, usage });
+    saveRun(ctx.root, ctx.at, { node, id: result.id, agent, model, outcome: result.outcome, usage, ...extra });
   }
   if (result.state) saveState(ctx.root, result.state);
 
   switch (result.outcome) {
     case 'idle': return console.log(result.message);
-    case 'question': return console.log(`spec → ${result.id} 질문 대기\n${result.message}\n\n답하기: agdd answer ${result.id} "<답>"`);
-    case 'drafted': return console.log(`spec → ${result.id} 승인 대기\n${result.message}\n\n읽기: agdd show ${result.id}   승인: agdd approve ${result.id}`);
-    default: throw new UsageError(`spec → ${result.id}: ${result.message}`);
+    case 'question': return console.log(`${node} → ${result.id} 질문 대기\n${result.message}\n\n답하기: agdd answer ${result.id} "<답>"`);
+    case 'drafted': return console.log(`${node} → ${result.id} 승인 대기\n${result.message}\n\n읽기: agdd show ${result.id}   승인: agdd approve ${result.id}`);
+    default: throw new UsageError(`${node} → ${result.id}: ${result.message}`);
   }
 };
 
@@ -199,8 +250,8 @@ const main = async (argv: string[]) => {
   if (command === 'tick') return tick(ctx, config, args);
   if (command === 'next') {
     const node = args[0];
-    if (node !== 'spec' && node !== 'dev' && node !== 'verify') throw new UsageError(USAGE);
-    const pick = pickNext(node, ctx.docs, ctx.states, config);
+    if (!['spec', 'design', 'dev', 'verify'].includes(node)) throw new UsageError(USAGE);
+    const pick = pickNext(node as PickNode, ctx.docs, ctx.states, config);
     return console.log(pick.id ? `${node} → ${pick.id}` : pick.reason);
   }
   const human = humanCommands[command];

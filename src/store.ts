@@ -14,7 +14,7 @@ export const paths = (root: string) => ({
   config: join(root, 'agdd.config.json'),
 });
 
-export type Role = 'spec-writer';
+export type Role = 'spec-writer' | 'designer';
 export type RoleSetting = Readonly<{ agent: string; model?: string }>;
 
 export type Settings = Config & Readonly<{
@@ -28,7 +28,7 @@ export type Settings = Config & Readonly<{
 const DEFAULT_CONFIG: Settings = {
   wip: { spec: 3, design: 3 },
   limits: { rejections: 3, reworks: 3, sameFailure: 2 },
-  roles: { 'spec-writer': { agent: 'claude' } },
+  roles: { 'spec-writer': { agent: 'claude' }, designer: { agent: 'claude' } },
   agent: { timeoutMs: 600_000, maxTurns: 30 },
 };
 

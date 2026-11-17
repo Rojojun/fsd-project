@@ -112,8 +112,10 @@ export const readSpec = (root: string, id: string): SavedSpec | null => {
 };
 
 /** 스펙 폴더 전체의 지문. 승인과 Spec Gate가 이 값에 묶인다. 폴더 안의 무엇이 바뀌어도 달라진다. */
-export const specHash = (root: string, id: string): string | null => {
-  const dir = specDir(root, id);
+export const specHash = (root: string, id: string): string | null => dirHash(specDir(root, id));
+
+/** 폴더 안 모든 파일의 이름과 내용으로 만든 지문. 폴더가 없거나 비었으면 null. */
+export const dirHash = (dir: string): string | null => {
   if (!existsSync(dir)) return null;
   const files = readdirSync(dir).filter(f => !f.endsWith('.tmp')).sort();
   if (files.length === 0) return null;

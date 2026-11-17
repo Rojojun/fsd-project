@@ -9,7 +9,7 @@ const args = (task: AgentTask, schemaFile: string): string[] => [
   '--skip-git-repo-check',
   // 매번 새 세션. 맥락은 저장소에서만 온다.
   '--ephemeral',
-  '-s', task.access,
+  '-s', task.access === 'read-only' ? 'read-only' : 'workspace-write',
   '--output-schema', schemaFile,
   '--json',
   ...(task.model ? ['-m', task.model] : []),

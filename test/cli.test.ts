@@ -264,3 +264,138 @@ test('status 표는 질문이 길고 여러 줄이어도 요구사항당 한 줄
   assert.ok(lines.every(l => l.length < 120), '줄이 너무 깁니다');
   assert.match(run(root, 'show', 'A-1').stdout, /둘째 질문/);
 });
+
+// ── 디자인 루프 ──
+
+const uiSpec = { ...sampleSpec, design: { needed: true, reason: '목록 화면이 새로 생긴다' } };
+/** 스펙 초안(디자인 필요)이 제출된 작업 폴더 */
+const draftedUi = (frontExtra = '') => {
+  const root = workspace({ 'A-1.md': req('A-1').replace('priority: P1', `priority: P1${frontExtra}`) });
+  run(root, 'sync');
+  writeSpec(root, { id: 'A-1', title: 'A-1', priority: 'P1', depends: [], policies: [], design: null, deprecated: false, body: 'b', hash: stateOf(root, 'A-1').reqHash }, uiSpec);
+  writeState(root, apply(stateOf(root, 'A-1'), 'draftSpec', 'spec', { specHash: specHash(root, 'A-1')! }, at));
+  return root;
+};
+const designOut = (location: string) => ({
+  status: 'done', questions: [],
+  design: { summary: '목록 화면 디자인', location, screens: [{ name: '목록', description: '빈 상태 포함', covers: ['AC-1'] }] },
+});
+/**
+ * `mcp list`에는 서버 목록을, 그 밖의 호출에는 정해진 결과를 내는 가짜 에이전트.
+ * 받은 인자를 <이름>.args에 남기고, drawsHtml이면 실제 에이전트처럼 디자인 파일을 쓴다.
+ */
+const fakeDesigner = (root: string, name: string, opts: { mcpList?: string; stdout?: string; drawsHtml?: boolean }) => {
+  const bin = join(root, '.fake-bin');
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(join(bin, `${name}.mcp`), opts.mcpList ?? '');
+  writeFileSync(join(bin, `${name}.out`), opts.stdout ?? '');
+  const draw = opts.drawsHtml ? 'mkdir -p designs/A-1 && printf "<!doctype html><html><title>목록</title></html>" > designs/A-1/index.html\n' : '';
+  writeFileSync(join(bin, name), `#!/bin/sh\nd="$(dirname "$0")"\nif [ "$1" = "mcp" ]; then cat "$d/${name}.mcp"; exit 0; fi\necho "$@" > "$d/${name}.args"\n${draw}cat "$d/${name}.out"\n`);
+  chmodSync(join(bin, name), 0o755);
+  return { ...process.env, PATH: `${bin}:${process.env.PATH}` };
+};
+const argsOf = (root: string, name: string) => readFileSync(join(root, '.fake-bin', `${name}.args`), 'utf8');
+const lastRun = (root: string) => {
+  const dir = join(root, '.agdd', 'runs');
+  return JSON.parse(readFileSync(join(dir, readdirSync(dir).sort().at(-1)!), 'utf8'));
+};
+
+test('디자인이 필요한 스펙을 승인하면 design 후보가 되고 dev 후보에서는 빠진다', () => {
+  const root = draftedUi();
+  assert.equal(run(root, 'approve', 'A-1').status, 0);
+  assert.equal(stateOf(root, 'A-1').designRequired, true);
+  assert.match(run(root, 'next', 'design').stdout, /A-1/);
+  assert.match(run(root, 'next', 'dev').stdout, /후보가 없습니다/);
+});
+
+test('요구사항 머리말의 design: false는 spec 노드의 판단보다 우선한다', () => {
+  const root = draftedUi('\ndesign: false');
+  // 머리말을 고쳤으므로 초안을 다시 제출한 상태로 만든다
+  writeSpec(root, { id: 'A-1', title: 'A-1', priority: 'P1', depends: [], policies: [], design: false, deprecated: false, body: 'b', hash: stateOf(root, 'A-1').reqHash }, uiSpec);
+  writeState(root, apply({ ...stateOf(root, 'A-1'), holds: [] }, 'draftSpec', 'spec', { specHash: specHash(root, 'A-1')! }, at));
+  assert.equal(run(root, 'approve', 'A-1').status, 0);
+  assert.equal(stateOf(root, 'A-1').designRequired, false);
+  assert.match(run(root, 'next', 'dev').stdout, /A-1/);
+});
+
+test('tick design: 디자인 도구가 없으면 claude가 HTML로 그리고 승인 대기가 붙는다', () => {
+  const root = draftedUi();
+  run(root, 'approve', 'A-1');
+  const env = fakeDesigner(root, 'claude', { mcpList: 'linear: x - ✔ Connected', stdout: claudeOut(designOut('x')), drawsHtml: true });
+  const r = runEnv(root, env, 'tick', 'design');
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /A-1.*승인 대기/s);
+  const s = stateOf(root, 'A-1');
+  assert.deepEqual([s.status, s.holds[0].kind, s.holds[0].raisedBy], ['specified', 'approval', 'design']);
+  const saved = JSON.parse(readFileSync(join(root, 'designs', 'A-1', 'design.json'), 'utf8'));
+  assert.deepEqual([saved.surface, saved.location], ['html', 'designs/A-1/index.html']);
+  assert.deepEqual([lastRun(root).node, lastRun(root).agent, lastRun(root).surface], ['design', 'claude', 'html']);
+  assert.doesNotMatch(argsOf(root, 'claude'), /Bash/);
+});
+
+test('tick design: penpot이 연결되어 있으면 penpot에 그리게 하고 주소를 저장한다', () => {
+  const root = draftedUi();
+  run(root, 'approve', 'A-1');
+  const env = fakeDesigner(root, 'claude', {
+    mcpList: 'figma: y - ✔ Connected\npenpot: x - ✔ Connected',
+    stdout: claudeOut(designOut('https://design.penpot.app/#/view/1')),
+  });
+  const r = runEnv(root, env, 'tick', 'design');
+  assert.equal(r.status, 0, r.stderr);
+  const saved = JSON.parse(readFileSync(join(root, 'designs', 'A-1', 'design.json'), 'utf8'));
+  assert.deepEqual([saved.surface, saved.location], ['penpot', 'https://design.penpot.app/#/view/1']);
+  assert.match(argsOf(root, 'claude'), /mcp__penpot/);
+  assert.doesNotMatch(argsOf(root, 'claude'), /Edit|Write/);
+});
+
+test('tick design: 역할의 에이전트가 codex여도 디자인 도구가 없으면 claude를 부른다', () => {
+  const root = draftedUi();
+  writeFileSync(join(root, 'agdd.config.json'), JSON.stringify({ roles: { designer: { agent: 'codex' } } }));
+  run(root, 'approve', 'A-1');
+  fakeDesigner(root, 'codex', { mcpList: 'Name  Status\nrea   enabled' });
+  const env = fakeDesigner(root, 'claude', { stdout: claudeOut(designOut('x')), drawsHtml: true });
+  const r = runEnv(root, env, 'tick', 'design');
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(lastRun(root).agent, 'claude');
+  assert.equal(existsSync(join(root, '.fake-bin', 'codex.args')), false, 'codex로 그리면 안 된다');
+});
+
+test('tick design: 디자인이 필요한 요구사항이 없으면 도구 확인도 에이전트 호출도 하지 않는다', () => {
+  const root = workspace({ 'A-1.md': req('A-1') });
+  run(root, 'sync');
+  draft(root, 'A-1');
+  run(root, 'approve', 'A-1');
+  const env = fakeDesigner(root, 'claude', { mcpList: '', stdout: 'should not run' });
+  writeFileSync(join(root, '.fake-bin', 'claude'), '#!/bin/sh\necho called > "$(dirname "$0")/called"\nexit 9\n');
+  const r = runEnv(root, env, 'tick', 'design');
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /후보가 없습니다/);
+  assert.equal(existsSync(join(root, '.fake-bin', 'called')), false);
+});
+
+test('디자인 초안은 show로 읽고 approve로 확정하며, 그 뒤에야 dev 후보가 된다', () => {
+  const root = draftedUi();
+  run(root, 'approve', 'A-1');
+  const env = fakeDesigner(root, 'claude', { stdout: claudeOut(designOut('x')), drawsHtml: true });
+  runEnv(root, env, 'tick', 'design');
+  const shown = run(root, 'show', 'A-1').stdout;
+  assert.match(shown, /목록 화면 디자인/);
+  assert.match(shown, /designs\/A-1\/index\.html/);
+  assert.match(shown, /디자인 초안 \(미승인\)/);
+
+  const r = run(root, 'approve', 'A-1');
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(stateOf(root, 'A-1').status, 'designed');
+  assert.match(run(root, 'next', 'dev').stdout, /A-1/);
+});
+
+test('디자인 초안 제출 뒤 디자인 파일이 바뀌면 approve를 거부한다', () => {
+  const root = draftedUi();
+  run(root, 'approve', 'A-1');
+  runEnv(root, fakeDesigner(root, 'claude', { stdout: claudeOut(designOut('x')), drawsHtml: true }), 'tick', 'design');
+  writeFileSync(join(root, 'designs', 'A-1', 'index.html'), '<!doctype html><html>몰래 바꿈</html>');
+  const r = run(root, 'approve', 'A-1');
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /해시/);
+  assert.equal(stateOf(root, 'A-1').status, 'specified');
+});

@@ -70,6 +70,34 @@ test('claude: 쓰기 과제는 편집 도구를 허용하고 모델 지정을 �
   assert.equal(args[args.indexOf('--model') + 1], 'claude-sonnet-5-5');
 });
 
+test('claude: 파일 쓰기 과제는 편집 도구만 허용하고 셸은 허용하지 않는다', async () => {
+  const { exec, calls } = fakeExec(done(fixture('claude-question.json')));
+  await claudeAgent(exec)({ ...task, access: 'write-files' });
+  assert.equal(calls[0].args[calls[0].args.indexOf('--allowedTools') + 1], 'Read,Glob,Grep,Edit,Write');
+});
+
+test('claude: MCP 서버가 필요한 과제는 그 서버의 도구를 허용하고 개인 설정 격리를 푼다', async () => {
+  const { exec, calls } = fakeExec(done(fixture('claude-question.json')));
+  await claudeAgent(exec)({ ...task, mcp: ['penpot'] });
+  const { args } = calls[0];
+  assert.equal(args[args.indexOf('--allowedTools') + 1], 'Read,Glob,Grep,mcp__penpot');
+  assert.ok(!args.includes('--strict-mcp-config'));
+  assert.ok(!args.includes('--setting-sources'));
+});
+
+test('claude: MCP가 필요 없는 과제는 개인 설정과 MCP를 격리한다', async () => {
+  const { exec, calls } = fakeExec(done(fixture('claude-question.json')));
+  await claudeAgent(exec)(task);
+  assert.ok(calls[0].args.includes('--strict-mcp-config'));
+  assert.equal(calls[0].args[calls[0].args.indexOf('--setting-sources') + 1], 'project');
+});
+
+test('codex: 파일 쓰기 과제는 작업 폴더 쓰기 샌드박스로 건다', async () => {
+  const { exec, calls } = fakeExec(done(fixture('codex-question.jsonl')));
+  await codexAgent(exec)({ ...task, access: 'write-files' });
+  assert.equal(calls[0].args[calls[0].args.indexOf('-s') + 1], 'workspace-write');
+});
+
 test('codex: 마지막 메시지를 결과로 돌려주고 토큰 사용량을 정규화한다', async () => {
   const { exec } = fakeExec(done(fixture('codex-question.jsonl')));
   const r = await codexAgent(exec)(task);

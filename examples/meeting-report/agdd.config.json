@@ -1,0 +1,4 @@
+{
+  "verify": { "command": "npx playwright test e2e/{id}/", "timeoutMs": 600000 },
+  "agent": { "timeoutMs": 900000, "maxTurns": 60 }
+}

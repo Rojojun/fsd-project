@@ -150,3 +150,12 @@ test('스펙에 대한 예전 지적은 디자이너에게 넘기지 않는다',
   assert.equal(r.outcome, 'drafted', r.message);
   assert.ok(!tasks[0].prompt.includes('스펙의 빈 목록 조건 누락'));
 });
+
+test('사람이 이미 내린 결정은 프롬프트에 담겨, 같은 것을 다시 묻지 않게 한다', async () => {
+  const { agent, tasks } = fakeAgent({ output: output() }, writesHtml);
+  const answered = (s: RequirementState) =>
+    apply(apply(s, 'ask', 'design', { question: '날짜 형식은?' }, at), 'answer', 'human', { answer: '2026-11-17 형식' }, at);
+  await tickDesign({ ...setup(answered), agent, ...html });
+  assert.ok(tasks[0].prompt.includes('날짜 형식은?'));
+  assert.ok(tasks[0].prompt.includes('2026-11-17 형식'));
+});

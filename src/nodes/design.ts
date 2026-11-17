@@ -44,6 +44,7 @@ const buildPrompt = (input: DesignTickInput, doc: RequirementDoc, state: Require
     section('그릴 곳', target),
     section('요구사항', `ID: ${doc.id}\n제목: ${doc.title}\n\n${doc.body}`),
     section('확정된 스펙 (이 범위를 넘지 않는다)', renderSpec(readSpec(root, doc.id)!)),
+    section('사람이 이미 내린 결정 (다시 묻지 않는다)', state.decisions.map(d => `- 질문: ${d.question}\n  답: ${d.answer}`).join('\n')),
     section('UI 기준 (design/ui.md)', language.ui ?? ''),
     section('UX 기준 (design/ux.md)', language.ux ?? ''),
     section('이전 디자인에 대한 사람의 지적 (모두 반영하고, 하나하나 명문화한다)', designFeedback(state).map(f => `- [${f.aspect ? f.aspect.toUpperCase() : 'UI·UX'}] ${f.message}`).join('\n')),

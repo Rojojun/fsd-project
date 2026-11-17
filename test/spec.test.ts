@@ -94,3 +94,8 @@ test('사람이 읽을 스펙 문서는 인수 조건을 ID와 함께 보여 준
   assert.match(text, /최신 항목이 먼저 온다/);
   assert.match(text, /newest-first/);
 });
+
+test('행동(when)에 결과(then)를 되풀이해 쓰면 거부한다', () => {
+  const repeated = [{ id: 'AC-1', given: '항목이 있을 때', when: 'GET /tasks를 요청하면 상태 코드가 200이다.', then: '상태 코드가 200이다.' }];
+  assert.match(errorsOf(done({ acceptance: repeated })), /AC-1.*행동.*결과/);
+});

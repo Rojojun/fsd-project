@@ -48,6 +48,11 @@ const filled = (v: unknown): v is string => typeof v === 'string' && v.trim() !=
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const duplicates = (ids: string[]) => [...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))];
 
+const normalize = (v: unknown) => String(v).replace(/[\s.]/g, '');
+/** 행동 칸에 결과 문장이 통째로 들어 있는가 */
+const repeatsResult = (a: Record<string, unknown>) =>
+  filled(a.when) && filled(a.then) && normalize(a.when).includes(normalize(a.then));
+
 const specErrors = (spec: unknown, doc: RequirementDoc): string[] => {
   if (!isObject(spec)) return ['완료(done)에는 spec이 필요합니다.'];
   const acceptance = Array.isArray(spec.acceptance) ? spec.acceptance.filter(isObject) : [];
@@ -60,6 +65,7 @@ const specErrors = (spec: unknown, doc: RequirementDoc): string[] => {
     ...acceptance.flatMap((a, i) =>
       (['id', 'given', 'when', 'then'] as const).filter(k => !filled(a[k])).map(k => `인수 조건 ${i + 1}번의 ${k}이(가) 비어 있습니다.`)),
     ...duplicates(acceptance.map(a => String(a.id))).map(id => `인수 조건 ID ${id}이(가) 겹칩니다.`),
+    ...acceptance.filter(repeatsResult).map(a => `인수 조건 ${String(a.id)}: 행동(when)에 결과(then)를 되풀이해 썼습니다. 행동에는 하는 일만 적습니다.`),
     ...doc.policies.filter(id => !cited.includes(id)).map(id => `요구사항이 근거로 든 정책 ${id}을(를) 스펙이 다루지 않았습니다.`),
     ...cited.filter(id => !doc.policies.includes(id)).map(id => `요구사항에 없는 정책 ${id}을(를) 인용했습니다.`),
     ...policies.filter(p => !filled(p.applied)).map(p => `정책 ${String(p.id)}을(를) 어떻게 적용했는지 비어 있습니다.`),

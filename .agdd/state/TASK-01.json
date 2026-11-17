@@ -2,7 +2,16 @@
   "id": "TASK-01",
   "status": "cataloged",
   "reqHash": "17ae3809838e33ebcefa060609eafde1df0e4688ca59193a72e44663bf07dfde",
-  "holds": [],
+  "holds": [
+    {
+      "id": "Q1",
+      "kind": "question",
+      "raisedBy": "spec",
+      "message": "1) 액션 아이템 하나는 응답에서 어떤 필드를 갖습니까? 요구사항에는 필드 정의가 없습니다. 선택지: (a) `id`, `title`, `createdAt` (b) `id`, `title`, `assignee`, `dueDate`, `createdAt` (c) 직접 지정. 필드 이름과 타입을 함께 알려 주십시오(예: `id`는 문자열, `createdAt`은 ISO 8601 UTC 문자열).\n2) 생성일이 같은 액션 아이템끼리는 순서를 어떻게 합니까? 선택지: (a) 순서를 정하지 않는다(검증하지 않음) (b) `id` 오름차순 (c) `id` 내림차순 (d) 직접 지정.\n3) `GET /tasks`가 성공하면 상태 코드는 200이고, 액션 아이템이 없을 때도 200과 빈 배열 `[]`을 돌려주는 것이 맞습니까? 선택지: (a) 맞다 (b) 다르다(원하는 상태 코드를 지정).",
+      "at": "2026-11-17T06:10:16.956Z",
+      "artifactHash": null
+    }
+  ],
   "approvedSpecHash": null,
   "bug": null,
   "decisions": [],
@@ -15,6 +24,14 @@
       "actor": "sync",
       "at": "2026-11-17T05:44:32.870Z",
       "message": "요구사항 등록"
+    },
+    {
+      "from": "cataloged",
+      "to": "cataloged",
+      "transition": "ask",
+      "actor": "spec",
+      "at": "2026-11-17T06:10:16.956Z",
+      "message": "질문: 1) 액션 아이템 하나는 응답에서 어떤 필드를 갖습니까? 요구사항에는 필드 정의가 없습니다. 선택지: (a) `id`, `title`, `createdAt` (b) `id`, `title`, `assignee`, `dueDate`, `createdAt` (c) 직접 지정. 필드 이름과 타입을 함께 알려 주십시오(예: `id`는 문자열, `createdAt`은 ISO 8601 UTC 문자열).\n2) 생성일이 같은 액션 아이템끼리는 순서를 어떻게 합니까? 선택지: (a) 순서를 정하지 않는다(검증하지 않음) (b) `id` 오름차순 (c) `id` 내림차순 (d) 직접 지정.\n3) `GET /tasks`가 성공하면 상태 코드는 200이고, 액션 아이템이 없을 때도 200과 빈 배열 `[]`을 돌려주는 것이 맞습니까? 선택지: (a) 맞다 (b) 다르다(원하는 상태 코드를 지정)."
     }
   ]
 }

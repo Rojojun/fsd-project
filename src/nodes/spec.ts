@@ -44,7 +44,7 @@ const buildPrompt = (input: SpecTickInput, doc: RequirementDoc, state: Requireme
     section('요구사항', `ID: ${doc.id}\n제목: ${doc.title}\n우선순위: ${doc.priority}\n\n${doc.body}`),
     section('근거 정책', doc.policies.map(id => `## ${id}\n\n${policies[id]}`).join('\n\n')),
     section('사람이 이미 내린 결정', state.decisions.map(d => `- 질문: ${d.question}\n  답: ${d.answer}`).join('\n')),
-    section('이전 초안이 반려된 사유', state.feedback.map(f => `- ${f.message}`).join('\n')),
+    section('이전 스펙에 대한 사람의 지적 (모두 반영한다)', state.feedback.map(f => `- ${f.message}`).join('\n')),
     section('선행 요구사항의 확정 스펙', dependencies.join('\n\n')),
     section('이전 스펙 (요구사항이 바뀌어 다시 확정해야 한다)', previous ? renderSpec(previous) : ''),
   ].filter(Boolean).join('\n\n---\n\n');

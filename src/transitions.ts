@@ -146,7 +146,10 @@ const RULES: { [N in TransitionName]: Rule<Inputs[N]> } = {
   },
   respec: {
     from: POST_SPEC, to: 'stale', actors: ['human'],
-    effect: () => ({ holds: [] }),
+    effect: ({ state, input, at }) => ({
+      holds: [],
+      feedback: [...state.feedback, { message: input.reason, specHash: state.approvedSpecHash, at }],
+    }),
     message: ({ input }) => `스펙 재확정 결정: ${input.reason}`,
   },
 };

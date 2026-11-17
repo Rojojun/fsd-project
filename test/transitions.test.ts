@@ -142,3 +142,8 @@ test('전이는 원본 상태를 바꾸지 않는다', () => {
   apply(before, 'draftSpec', 'spec', { specHash: 'x' }, at);
   assert.deepEqual(before, snapshot);
 });
+
+test('respec의 사유는 다음 스펙 작성자가 읽도록 피드백으로 남는다', () => {
+  const s = apply(specified(), 'respec', 'human', { reason: 'audit 모순' }, at);
+  assert.deepEqual(s.feedback.at(-1), { message: 'audit 모순', specHash: 'spec-h1', at });
+});

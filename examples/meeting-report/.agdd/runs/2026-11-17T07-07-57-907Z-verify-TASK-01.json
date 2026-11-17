@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-17T07:07:57.907Z",
+  "node": "verify",
+  "id": "TASK-01",
+  "agent": "claude",
+  "model": "claude-fable-5-2",
+  "outcome": "verified",
+  "usage": {
+    "costUsd": 0.7075524,
+    "inputTokens": 94432,
+    "outputTokens": 8279,
+    "turns": 4,
+    "durationMs": 68809
+  }
+}

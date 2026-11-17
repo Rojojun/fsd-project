@@ -1,0 +1,125 @@
+{
+  "summary": "TASK-01의 `GET /tasks`를 API로만 검사한다. 테스트마다 `createServer({ tasks })`로 서버를 빈 포트(`listen(0)`)에 띄우고 Playwright `request`로 실제 HTTP 요청을 보낸 뒤 서버를 닫는다. 인수 조건 AC-1~AC-7을 모두 다루고, 경계(없음·하나·여럿, 저장 순서가 이미 최신순/오래된 순, 같은 요청 반복)를 각각 확인한다. `npx playwright test e2e/TASK-01/`로 실행해 9개 모두 통과했다(구현 결함은 발견되지 않음). 파일: `e2e/TASK-01/tasks-list.spec.mjs`(테스트), `e2e/TASK-01/helpers.mjs`(서버 띄우기·요청 도우미, 테스트 폴더 밖은 건드리지 않음).\n\n일부러 검사하지 않은 것:\n- 화면·UX·UI 시나리오: 이 요구사항에는 디자인이 없고 `web/` 화면도 없다. API만 약속되어 있어 해당하는 UX/UI 기준 항목이 없다.\n- `createdAt`이 같은 항목끼리의 순서: 스펙과 사람의 결정이 '정하지 않는다, 검증하지 않는다'고 했다.\n- 오류 응답(없는 경로, 다른 메서드의 404 등)과 쿼리 매개변수: 스펙이 정하지 않았다.\n- `Content-Type` 헤더: 스펙이 정하지 않았다. 본문이 JSON으로 읽히는지만 확인한다.\n- 세 필드 외의 추가 필드 금지 여부: 스펙이 명시적으로 금지하지 않아 `id`, `title`, `createdAt`의 값과 타입만 확인한다.\n- Z 형식이 아닌 생성일 입력(오프셋 표기, 밀리초 등)의 변환: 저장 입력 형식은 스펙이 정하지 않았으므로 스펙의 예시 형식(`...Z`)으로만 데이터를 넣는다.",
+  "scenarios": [
+    {
+      "id": "S-1",
+      "target": "api",
+      "screen": "",
+      "covers": [
+        "AC-1"
+      ],
+      "basis": "acceptance",
+      "title": "액션 아이템이 한 개 저장되어 있으면 200을 돌려준다",
+      "steps": "1) 액션 아이템 한 개(`t1`, `2026-11-10T09:00:00Z`)를 넣어 서버를 띄운다. 2) `GET /tasks`를 요청한다.",
+      "expected": "상태 코드가 `200`이다.",
+      "file": "e2e/TASK-01/tasks-list.spec.mjs"
+    },
+    {
+      "id": "S-2",
+      "target": "api",
+      "screen": "",
+      "covers": [
+        "AC-1"
+      ],
+      "basis": "acceptance",
+      "title": "액션 아이템이 여러 개 저장되어 있어도 200을 돌려준다",
+      "steps": "1) 생성일이 서로 다른 액션 아이템 세 개를 넣어 서버를 띄운다. 2) `GET /tasks`를 요청한다.",
+      "expected": "상태 코드가 `200`이다.",
+      "file": "e2e/TASK-01/tasks-list.spec.mjs"
+    },
+    {
+      "id": "S-3",
+      "target": "api",
+      "screen": "",
+      "covers": [
+        "AC-2"
+      ],
+      "basis": "acceptance",
+      "title": "createdAt이 서로 다른 세 개가 저장되어 있으면 요소가 세 개인 JSON 배열을 돌려준다",
+      "steps": "1) `createdAt`이 서로 다른 액션 아이템 `t1`, `t2`, `t3`을 넣어 서버를 띄운다. 2) `GET /tasks`를 요청하고 본문을 JSON으로 읽는다.",
+      "expected": "본문이 JSON 배열이고 요소가 정확히 세 개다. 세 요소의 `id`는 `t1`, `t2`, `t3`이 하나씩이다(빠지거나 겹치지 않고 저장된 것을 모두 담는다).",
+      "file": "e2e/TASK-01/tasks-list.spec.mjs"
+    },
+    {
+      "id": "S-4",
+      "target": "api",
+      "screen": "",
+      "covers": [
+        "AC-3"
+      ],
+      "basis": "acceptance",
+      "title": "하나만 저장되어 있으면 유일한 요소의 id, title, createdAt이 저장한 문자열 그대로다",
+      "steps": "1) `id` `\"a1\"`, `title` `\"회의록 공유\"`, `createdAt` `\"2026-11-17T06:10:16Z\"`인 액션 아이템 한 개만 넣어 서버를 띄운다. 2) `GET /tasks`를 요청하고 본문을 JSON으로 읽는다.",
+      "expected": "배열의 요소가 하나뿐이고, 그 요소의 `id`는 문자열 `\"a1\"`, `title`은 문자열 `\"회의록 공유\"`, `createdAt`은 문자열 `\"2026-11-17T06:10:16Z\"`이다(타입까지 일치).",
+      "file": "e2e/TASK-01/tasks-list.spec.mjs"
+    },
+    {
+      "id": "S-5",
+      "target": "api",
+      "screen": "",
+      "covers": [
+        "AC-4"
+      ],
+      "basis": "acceptance",
+      "title": "모든 요소의 createdAt은 ISO 8601 UTC 형식의 문자열이고, id와 title도 문자열이다",
+      "steps": "1) 생성일이 `2026-01-01T00:00:00Z`, `2026-11-17T06:10:16Z`, `2026-12-31T23:59:59Z`인 액션 아이템 세 개를 넣어 서버를 띄운다. 2) `GET /tasks`를 요청하고 모든 요소를 하나씩 본다.",
+      "expected": "모든 요소에서 `createdAt`이 문자열이고 `YYYY-MM-DDTHH:MM:SS(.소수초)Z` 형식이며 실제 날짜로 읽힌다. `id`와 `title`도 문자열이다. 응답의 `createdAt` 세 값은 저장한 세 값과 같다(시각이 바뀌지 않는다).",
+      "file": "e2e/TASK-01/tasks-list.spec.mjs"
+    },
+    {
+      "id": "S-6",
+      "target": "api",
+      "screen": "",
+      "covers": [
+        "AC-5"
+      ],
+      "basis": "acceptance",
+      "title": "15일, 17일, 16일 순서로 저장되어 있으면 17일, 16일, 15일 순서로 돌려준다",
+      "steps": "1) `createdAt`이 `2026-11-15T00:00:00Z`, `2026-11-17T00:00:00Z`, `2026-11-16T00:00:00Z`인 액션 아이템을 이 순서로 넣어 서버를 띄운다. 2) `GET /tasks`를 요청한다.",
+      "expected": "응답 배열의 `createdAt`이 차례로 `2026-11-17T00:00:00Z`, `2026-11-16T00:00:00Z`, `2026-11-15T00:00:00Z`이다. 각 요소의 `id`와 `title`도 자기 생성일과 함께 같은 순서(`d17`, `d16`, `d15`)로 나온다.",
+      "file": "e2e/TASK-01/tasks-list.spec.mjs"
+    },
+    {
+      "id": "S-7",
+      "target": "api",
+      "screen": "",
+      "covers": [
+        "AC-5"
+      ],
+      "basis": "acceptance",
+      "title": "이미 최신순이거나 오래된 순으로 저장되어 있어도 최신 것부터 돌려준다",
+      "steps": "1) 생성일이 서로 다른 세 개(같은 날 다른 시각 두 개 포함)를 최신순으로 넣어 서버를 띄우고 `GET /tasks`를 요청한다. 2) 같은 세 개를 오래된 순으로 넣어 새 서버를 띄우고 `GET /tasks`를 요청한다.",
+      "expected": "두 경우 모두 `id`가 `n3`(2026-11-17T12:00:00Z), `n2`(2026-11-17T06:00:00Z), `n1`(2026-10-01T00:00:00Z) 순서, 즉 생성일 내림차순이다.",
+      "file": "e2e/TASK-01/tasks-list.spec.mjs"
+    },
+    {
+      "id": "S-8",
+      "target": "api",
+      "screen": "",
+      "covers": [
+        "AC-6",
+        "AC-7"
+      ],
+      "basis": "acceptance",
+      "title": "액션 아이템이 하나도 없으면 200과 빈 JSON 배열 []을 돌려준다",
+      "steps": "1) 데이터를 주지 않고 서버를 띄워 `GET /tasks`를 요청한다. 2) 빈 목록을 주고 새 서버를 띄워 `GET /tasks`를 요청한다.",
+      "expected": "두 경우 모두 상태 코드가 `200`이고 본문은 빈 JSON 배열 `[]`이다(본문 글자도 `[]`).",
+      "file": "e2e/TASK-01/tasks-list.spec.mjs"
+    },
+    {
+      "id": "S-9",
+      "target": "api",
+      "screen": "",
+      "covers": [
+        "AC-2",
+        "AC-5",
+        "AC-6"
+      ],
+      "basis": "acceptance",
+      "title": "같은 요청을 다시 해도 같은 상태 코드와 같은 본문을 돌려준다",
+      "steps": "1) 15일, 17일, 16일 순서로 세 개를 넣어 서버를 띄우고 `GET /tasks`를 두 번 연달아 요청한다. 2) 빈 서버를 띄우고 `GET /tasks`를 두 번 연달아 요청한다.",
+      "expected": "세 개가 있을 때: 두 번 모두 `200`이고, 첫 응답은 `d17`, `d16`, `d15` 순서이며 두 번째 본문이 첫 번째와 완전히 같다. 비어 있을 때: 두 번 모두 `200`과 `[]`이다.",
+      "file": "e2e/TASK-01/tasks-list.spec.mjs"
+    }
+  ]
+}

@@ -142,3 +142,50 @@ test('실행 시간은 지우지만 설정값의 숫자는 남긴다', () => {
   assert.match(out, /Test timeout of 30000ms exceeded/);
   assert.doesNotMatch(out, /1\.2s|812ms/);
 });
+
+// ── 검증 명령이 직접 확인하는 인수 조건 ──
+
+const withCommand = (scenarios: object[], byCommand: object[]) =>
+  ({ status: 'done', questions: [], plan: { summary: '계획', scenarios, byCommand } });
+const CMD = 'npx tsc -p . && npx vitest run';
+
+test('검증 명령이 직접 확인한다고 표시한 인수 조건은 시나리오 없이도 다룬 것으로 본다', () => {
+  const r = checkQaPlan(withCommand(apiPlan.slice(0, 2), [{ id: 'AC-3', reason: '검증 명령의 tsc가 타입 오류 0을 확인한다' }]),
+    { spec, design: null, root: workspace(), command: CMD });
+  assert.ok(r.ok && r.kind === 'done', r.ok ? '' : r.errors.join('\n'));
+  assert.deepEqual(r.plan.byCommand, [{ id: 'AC-3', reason: '검증 명령의 tsc가 타입 오류 0을 확인한다' }]);
+});
+
+test('검증 명령이 설정되지 않았으면 검증 명령 표시를 받지 않는다', () => {
+  const r = checkQaPlan(withCommand(apiPlan.slice(0, 2), [{ id: 'AC-3', reason: '이유' }]), { spec, design: null, root: workspace() });
+  assert.ok(!r.ok);
+  assert.match(r.errors.join('\n'), /검증 명령/);
+});
+
+test('검증 명령 표시에는 이유가 있어야 하고, 스펙에 있는 인수 조건이어야 한다', () => {
+  const r = checkQaPlan(withCommand(apiPlan, [{ id: 'AC-3', reason: ' ' }, { id: 'AC-9', reason: '이유' }]),
+    { spec, design: null, root: workspace(), command: CMD });
+  assert.ok(!r.ok);
+  const all = r.errors.join('\n');
+  assert.match(all, /AC-3.*이유/);
+  assert.match(all, /AC-9/);
+});
+
+test('화면에 드러나는 인수 조건은 검증 명령 표시로 대신할 수 없다', () => {
+  const plan = screenPlan.filter(s => !(s.covers as string[]).includes('AC-1'));
+  const r = checkQaPlan(withCommand(plan, [{ id: 'AC-1', reason: '이유' }]), { spec, design, root: workspace(), command: CMD });
+  assert.ok(!r.ok);
+  assert.match(r.errors.join('\n'), /AC-1/);
+});
+
+test('byCommand가 없는 예전 계획도 그대로 읽힌다', () => {
+  const r = checkQaPlan(done(apiPlan), { spec, design: null, root: workspace(), command: CMD });
+  assert.ok(r.ok && r.kind === 'done');
+  assert.deepEqual(r.plan.byCommand ?? [], []);
+});
+
+test('사람이 읽을 계획에 검증 명령이 확인하는 인수 조건이 보인다', () => {
+  const text = renderQaPlan({ summary: '계획', scenarios: apiPlan.slice(0, 2), byCommand: [{ id: 'AC-3', reason: 'tsc가 확인' }] } as never, spec, null);
+  assert.match(text, /AC-3.*검증 명령/);
+  assert.match(text, /tsc가 확인/);
+});

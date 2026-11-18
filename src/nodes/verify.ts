@@ -84,7 +84,7 @@ export const tickVerify = async (input: VerifyTickInput): Promise<TickResult> =>
     if (!run.ok) return { id: doc.id, run, outcome: 'agent-failed', message: `QA 에이전트 실패(${run.reason}): ${run.detail}` };
 
     const design = state.approvedDesignHash !== null ? readDesign(root, doc.id) : null;
-    const checked = checkQaPlan(run.output, { spec: readSpec(root, doc.id)!, design, root });
+    const checked = checkQaPlan(run.output, { spec: readSpec(root, doc.id)!, design, root, command });
     if (!checked.ok) {
       return { id: doc.id, run, outcome: 'invalid-output', message: `검사 계획이 대조를 통과하지 못했습니다.\n${checked.errors.join('\n')}` };
     }

@@ -25,7 +25,9 @@ export type Scenario = Readonly<{
   /** 이 시나리오를 구현한 테스트 파일 */
   file: string;
 }>;
-export type QaPlan = Readonly<{ summary: string; scenarios: readonly Scenario[] }>;
+/** 테스트 파일 없이 검증 명령(verify.command) 자체가 확인하는 인수 조건. 예: 타입 오류 0, 기존 테스트 전체 통과 */
+export type ByCommand = Readonly<{ id: string; reason: string }>;
+export type QaPlan = Readonly<{ summary: string; scenarios: readonly Scenario[]; byCommand?: readonly ByCommand[] }>;
 
 const text = { type: 'string' };
 const strict = (properties: Record<string, object>) => ({
@@ -58,6 +60,7 @@ export const QA_OUTPUT_SCHEMA = strict({
             file: text,
           }),
         },
+        byCommand: { type: 'array', items: strict({ id: text, reason: text }) },
       }),
     ],
   },
@@ -83,7 +86,7 @@ const duplicates = (ids: string[]) => [...new Set(ids.filter((id, i) => ids.inde
  */
 export const checkQaPlan = (
   output: unknown,
-  { spec, design, root }: Readonly<{ spec: SavedSpec; design: SavedDesign | null; root: string }>,
+  { spec, design, root, command }: Readonly<{ spec: SavedSpec; design: SavedDesign | null; root: string; command?: string }>,
 ): QaCheck => {
   if (!isObject(output)) return { ok: false, errors: ['출력 형식이 객체가 아닙니다.'] };
   const questions = strings(output.questions).filter(filled);
@@ -100,6 +103,9 @@ export const checkQaPlan = (
   const coveredBy = (list: readonly Record<string, unknown>[]) => new Set(list.flatMap(s => strings(s.covers)));
   const screenNames = new Set((design?.screens ?? []).map(s => s.name));
   const visible = [...new Set((design?.screens ?? []).flatMap(s => s.covers))];
+  const byCommand = Array.isArray(output.plan.byCommand) ? output.plan.byCommand.filter(isObject) : [];
+  const commandIds = new Set(byCommand.map(b => String(b.id)));
+  const covered = new Set([...coveredBy(scenarios), ...commandIds]);
 
   const errors = [
     ...(questions.length ? ['완료(done)인데 질문이 남아 있습니다.'] : []),
@@ -112,7 +118,11 @@ export const checkQaPlan = (
       ...(['acceptance', 'ui', 'ux'].includes(String(s.basis)) ? [] : [`시나리오 ${String(s.id)}의 basis는 acceptance, ui, ux 중 하나여야 합니다.`]),
     ]),
     ...[...coveredBy(scenarios)].filter(id => !known.has(id)).map(id => `스펙에 없는 인수 조건 ${id}을(를) 다룬다고 했습니다.`),
-    ...spec.acceptance.filter(a => !coveredBy(scenarios).has(a.id)).map(a => `인수 조건 ${a.id}을(를) 검사하는 시나리오가 없습니다.`),
+    // 검증 명령이 직접 확인하는 조건
+    ...(byCommand.length && !filled(command) ? ['검증 명령(verify.command)이 설정되지 않아 byCommand를 쓸 수 없습니다.'] : []),
+    ...byCommand.filter(b => !known.has(String(b.id))).map(b => `스펙에 없는 인수 조건 ${String(b.id)}을(를) 검증 명령이 확인한다고 했습니다.`),
+    ...byCommand.filter(b => !filled(b.reason)).map(b => `인수 조건 ${String(b.id)}을(를) 검증 명령이 확인하는 이유가 비어 있습니다.`),
+    ...spec.acceptance.filter(a => !covered.has(a.id)).map(a => `인수 조건 ${a.id}을(를) 검사하는 시나리오가 없습니다.`),
     // 테스트 파일
     ...[...new Set(scenarios.map(s => String(s.file).replace(/^\.\//, '')).filter(Boolean))].flatMap(file => {
       if (!file.startsWith(`${dir}/`)) return [`테스트 파일은 ${dir} 안에 있어야 합니다: ${file}`];
@@ -131,7 +141,15 @@ export const checkQaPlan = (
         : []),
   ];
   if (errors.length) return { ok: false, errors };
-  return { ok: true, kind: 'done', plan: { summary: output.plan.summary as string, scenarios: scenarios as unknown as Scenario[] } };
+  return {
+    ok: true,
+    kind: 'done',
+    plan: {
+      summary: output.plan.summary as string,
+      scenarios: scenarios as unknown as Scenario[],
+      byCommand: byCommand.map(b => ({ id: String(b.id), reason: String(b.reason) })),
+    },
+  };
 };
 
 const planFile = (root: string, id: string) => join(root, e2ePath(id), 'qa-plan.json');
@@ -171,7 +189,11 @@ export const renderQaPlan = (plan: QaPlan, spec: SavedSpec, design: SavedDesign 
   return [
     `## 검사 계획\n\n${plan.summary}`,
     `### 인수 조건별\n\n${spec.acceptance
-      .map(a => `- ${a.id} (${a.then}): ${plan.scenarios.filter(s => s.covers.includes(a.id)).map(s => `${s.id} [${where(s)}]`).join(', ') || '없음'}`)
+      .map(a => {
+        const byCmd = (plan.byCommand ?? []).find(b => b.id === a.id);
+        const found = plan.scenarios.filter(s => s.covers.includes(a.id)).map(s => `${s.id} [${where(s)}]`);
+        return `- ${a.id} (${a.then}): ${[...found, ...(byCmd ? [`검증 명령 (${byCmd.reason})`] : [])].join(', ') || '없음'}`;
+      })
       .join('\n')}`,
     design ? `### 화면별\n\n${design.screens.map(sc => `- ${sc.name}: ${ids(plan.scenarios.filter(s => s.screen === sc.name))}`).join('\n')}` : '',
     `### 시나리오\n\n${plan.scenarios

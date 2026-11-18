@@ -51,6 +51,8 @@ export type RequirementState = Readonly<{
   id: string;
   status: Status;
   reqHash: string;
+  /** 마지막으로 반영한 요구사항 내용의 지문(선행 관계 제외). 예전 상태에는 없을 수 있다. */
+  contentHash?: string;
   holds: readonly Hold[];
   approvedSpecHash: string | null;
   /** 스펙 승인 때 함께 확정된 값. true면 디자인 승인 전에는 구현할 수 없다. */
@@ -77,4 +79,6 @@ export type RequirementDoc = Readonly<{
   deprecated: boolean;
   body: string;
   hash: string;
+  /** 선행 관계(depends)를 뺀 내용의 지문. 이것이 같으면 요구사항 내용은 그대로다. */
+  contentHash?: string;
 }>;

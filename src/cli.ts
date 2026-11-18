@@ -463,14 +463,14 @@ const main = async (argv: string[]) => {
   const changed = new Set([...synced.changes, ...escalated.changes].map(c => c.id));
   escalated.states.filter(s => changed.has(s.id)).forEach(s => saveState(root, s));
   const log = args.includes('--json') ? console.error : console.log;
-  synced.changes.forEach(c => log(`sync: ${c.id} ${c.transition}`));
+  synced.changes.filter(c => c.transition !== 'backfill').forEach(c => log(`sync: ${c.id} ${c.transition}`));
   escalated.changes.forEach(c => log(`escalate: ${c.id} 반복 한도 → 질문 대기`));
   const ctx: Ctx = { root, docs: catalog.docs, states: escalated.states, at, flags: args.filter(a => a.startsWith('--')) };
   const positional = args.filter(a => !a.startsWith('--'));
 
   if (command === 'cost') return console.log(args.includes('--json') ? JSON.stringify(costOf(ctx), null, 2) : costReport(costOf(ctx)));
   if (command === 'status') return console.log(args.includes('--json') ? statusJson(ctx) : status(ctx));
-  if (command === 'sync') return synced.changes.length || console.log('sync: 변경 없음');
+  if (command === 'sync') return synced.changes.some(c => c.transition !== 'backfill') || console.log('sync: 변경 없음');
   if (command === 'show') return console.log(show(ctx, positional[0]));
   if (command === 'tick') return tick(ctx, config, args);
   if (command === 'next') {

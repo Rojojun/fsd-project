@@ -10,6 +10,7 @@ type Inputs = {
   invalidate: { reqHash: string };
   deprecate: Record<string, never>;
   revive: { reqHash: string };
+  relink: { reqHash: string };
   draftSpec: { specHash: string; message?: string };
   ask: { question: string };
   answer: { answer: string; holdId?: string };
@@ -88,6 +89,11 @@ const RULES: { [N in TransitionName]: Rule<Inputs[N]> } = {
     from: ['deprecated'], to: 'cataloged', actors: ['sync'],
     effect: ({ input }) => ({ reqHash: input.reqHash }),
     message: () => '요구사항 복원',
+  },
+  relink: {
+    from: ALIVE, to: 'keep', actors: ['sync'],
+    effect: ({ input }) => ({ reqHash: input.reqHash }),
+    message: () => '선행 관계만 변경 → 상태 유지',
   },
   draftSpec: {
     from: PRE_SPEC, to: 'keep', actors: ['spec'],

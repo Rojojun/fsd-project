@@ -827,3 +827,23 @@ test('audit의 지적에 문제 아님으로 답하면, 같은 지적은 스펙�
   assert.match(r.stdout, /이미 물었거나 사람이 판단한 지적 1건/);
   assert.deepEqual(stateOf(root, 'A-1').holds, []);
 });
+
+test('검증 완료된 요구사항 파일에 선행 관계만 더해지면 상태가 그대로이고 sync 로그에 relink가 남는다', () => {
+  const root = workspace({ 'A-1.md': req('A-1'), 'B-1.md': req('B-1') });
+  run(root, 'sync');
+  writeState(root, { ...stateOf(root, 'A-1'), status: 'verified' });
+  writeFileSync(join(root, 'requirements', 'A-1.md'), req('A-1').replace('priority: P1', 'priority: P1\ndepends: [B-1]'));
+  const r = run(root, 'status');
+  assert.match(r.stdout, /sync: A-1 relink/);
+  assert.equal(stateOf(root, 'A-1').status, 'verified');
+});
+
+test('내용 지문 채우기(backfill)는 로그에 남기지 않는다', () => {
+  const root = workspace({ 'A-1.md': req('A-1') });
+  run(root, 'sync');
+  const { contentHash: _drop, ...old } = stateOf(root, 'A-1') as RequirementState & { contentHash?: string };
+  writeState(root, old as RequirementState);
+  const r = run(root, 'status');
+  assert.doesNotMatch(r.stdout, /backfill/);
+  assert.ok((stateOf(root, 'A-1') as RequirementState & { contentHash?: string }).contentHash);
+});

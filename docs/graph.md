@@ -56,6 +56,7 @@ Linear MCP 서버가 연결되어 있고 설정에 가져올 범위가 있을 �
 | invalidate | sync | specified, designed, in-dev, implemented, verified | stale | 파일 변경. hold와 버그를 버린다. |
 | deprecate | sync | deprecated 외 전부 | deprecated | 파일 삭제 또는 `deprecated: true`. hold를 버린다. |
 | revive | sync | deprecated | cataloged | 파일 복원 |
+| relink | sync | deprecated 외 전부 | 유지 | 선행 관계(`depends`)만 바뀜. 내용 지문(선행 관계를 뺀 머리말 + 본문)이 같으면 초안·승인·hold를 그대로 두고 파일 지문만 새로 고친다. 선행 관계는 작업 순서에만 쓰인다. |
 | draftSpec | spec | cataloged, stale | 유지 | 승인 대기 hold 추가 (초안 해시) |
 | ask | spec, dev, verify, audit | deprecated 외 전부 | 유지 | 질문 대기 hold 추가 |
 | answer | 사람 | 질문 대기가 있는 상태 | 유지 | 질문 hold 제거, 결정 기록 추가 |

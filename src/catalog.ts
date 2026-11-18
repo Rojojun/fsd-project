@@ -9,6 +9,10 @@ export type ParseResult = { ok: true; doc: RequirementDoc } | { ok: false; error
 
 export const fingerprint = (text: string) => createHash('sha256').update(text).digest('hex');
 
+/** 선행 관계는 작업 순서에만 쓰이므로 내용 지문에서 뺀다. */
+const contentFingerprint = ({ depends: _depends, ...rest }: Record<string, unknown>, body: string) =>
+  fingerprint(JSON.stringify({ front: rest, body }));
+
 const FRONT_MATTER = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/;
 const isStringList = (v: unknown): v is string[] => Array.isArray(v) && v.every(x => typeof x === 'string');
 const nonEmpty = (v: unknown): v is string => typeof v === 'string' && v.trim() !== '';
@@ -49,6 +53,7 @@ export const parseRequirement = (fileName: string, raw: string): ParseResult => 
       deprecated: deprecated as boolean,
       body,
       hash: fingerprint(text),
+      contentHash: contentFingerprint(front, body),
     },
   };
 };

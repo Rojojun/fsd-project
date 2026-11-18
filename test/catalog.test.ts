@@ -61,3 +61,16 @@ test('자기 자신을 선행 요구사항으로 둘 수 없다', () => {
   assert.ok(!r.ok);
   assert.match(r.errors.join(), /자기 자신/);
 });
+
+test('내용 지문은 선행 관계(depends)만 바뀌면 같고, 내용이 바뀌면 달라진다', () => {
+  const base = file('id: A-1\ntitle: 제목\npriority: P1\ndepends: []');
+  const relinked = file('id: A-1\ntitle: 제목\npriority: P1\ndepends:\n  - B-1');
+  const retitled = file('id: A-1\ntitle: 바뀐 제목\npriority: P1\ndepends: []');
+  const rewritten = file('id: A-1\ntitle: 제목\npriority: P1\ndepends: []', '다른 본문\n');
+  const [a, b, c, d] = [base, relinked, retitled, rewritten].map(t => parseRequirement('A-1.md', t));
+  assert.ok(a.ok && b.ok && c.ok && d.ok);
+  assert.notEqual(a.doc.hash, b.doc.hash, '파일 지문은 다르다');
+  assert.equal(a.doc.contentHash, b.doc.contentHash, '내용 지문은 같다');
+  assert.notEqual(a.doc.contentHash, c.doc.contentHash);
+  assert.notEqual(a.doc.contentHash, d.doc.contentHash);
+});

@@ -56,3 +56,49 @@ test('바뀐 파일만 반영하고 나머지 상태는 그대로 둔다', () =>
   assert.deepEqual(r.changes.map(c => c.id), ['A']);
   assert.equal(r.states.find(s => s.id === 'B'), b);
 });
+
+// ── 선행 관계만 바뀐 경우 ──
+
+const withContent = (s: RequirementState, contentHash: string): RequirementState => ({ ...s, contentHash });
+const docC = (id: string, hash: string, contentHash: string) => doc(id, hash, { contentHash });
+
+test('확정된 요구사항의 선행 관계만 바뀌면 무효로 하지 않고 지문만 새로 고친다 (relink)', () => {
+  const r = sync([docC('A', 'h2', 'c1')], [withContent(specifiedState('A', 'h1'), 'c1')], at);
+  assert.deepEqual(r.changes.map(c => c.transition), ['relink']);
+  assert.equal(r.states[0].status, 'specified');
+  assert.equal(r.states[0].reqHash, 'h2');
+  assert.equal(r.states[0].approvedSpecHash, 's');
+  assert.equal(r.states[0].history.at(-1)?.transition, 'relink');
+});
+
+test('승인 대기 중인 초안도 선행 관계만 바뀌면 그대로 둔다', () => {
+  const drafted = withContent(apply(register('A', 'h1', at), 'draftSpec', 'spec', { specHash: 's' }, at), 'c1');
+  const r = sync([docC('A', 'h2', 'c1')], [drafted], at);
+  assert.deepEqual(r.changes.map(c => c.transition), ['relink']);
+  assert.equal(r.states[0].holds[0]?.kind, 'approval');
+});
+
+test('내용이 바뀌면 지금처럼 무효로 한다', () => {
+  const r = sync([docC('A', 'h2', 'c2')], [withContent(specifiedState('A', 'h1'), 'c1')], at);
+  assert.deepEqual(r.changes.map(c => c.transition), ['invalidate']);
+  assert.equal(r.states[0].contentHash, 'c2');
+});
+
+test('내용 지문이 없는 예전 상태는, 파일이 그대로일 때 이력 없이 내용 지문을 채운다 (backfill)', () => {
+  const old = specifiedState('A', 'h1');
+  const r = sync([docC('A', 'h1', 'c1')], [old], at);
+  assert.deepEqual(r.changes.map(c => c.transition), ['backfill']);
+  assert.equal(r.states[0].contentHash, 'c1');
+  assert.equal(r.states[0].history.length, old.history.length);
+  assert.equal(r.states[0].status, 'specified');
+});
+
+test('내용 지문이 없는 예전 상태에서 파일이 바뀌면 판단할 근거가 없으니 지금처럼 무효로 한다', () => {
+  const r = sync([docC('A', 'h2', 'c1')], [specifiedState('A', 'h1')], at);
+  assert.deepEqual(r.changes.map(c => c.transition), ['invalidate']);
+});
+
+test('새로 등록할 때 내용 지문을 함께 남긴다', () => {
+  const r = sync([docC('A', 'h1', 'c1')], [], at);
+  assert.equal(r.states[0].contentHash, 'c1');
+});

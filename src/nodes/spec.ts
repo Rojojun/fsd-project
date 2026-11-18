@@ -54,7 +54,10 @@ const buildPrompt = (input: SpecTickInput, doc: RequirementDoc, state: Requireme
   return [
     skill.trim(),
     section('요구사항', `ID: ${doc.id}\n제목: ${doc.title}\n우선순위: ${doc.priority}\n\n${doc.body}`),
-    section('근거 정책', doc.policies.map(id => `## ${id}\n\n${policies[id]}`).join('\n\n')),
+    // policies는 정책 파일(policies/<ID>.md)만 뜻한다. 본문에 나오는 다른 정책 번호와 헷갈리지 않게 분명히 적는다.
+    doc.policies.length
+      ? section('근거 정책', `스펙의 policies에는 아래 ID만 쓴다: ${doc.policies.join(', ')}\n\n${doc.policies.map(id => `## ${id}\n\n${policies[id]}`).join('\n\n')}`)
+      : section('근거 정책', '이 요구사항이 근거로 든 정책 파일은 없다. 스펙의 policies는 빈 배열로 둔다.\n요구사항 본문에 정책 번호(예: POL-001)가 나오면 그 내용은 계약과 인수 조건의 글 속에 반영한다.'),
     section('사람이 이미 내린 결정', state.decisions.map(d => `- 질문: ${d.question}\n  답: ${d.answer}`).join('\n')),
     section('이전 스펙에 대한 사람의 지적 (모두 반영한다)', state.feedback.filter(f => f.about !== 'design').map(f => `- ${f.message}`).join('\n')),
     section('디자인 언어', input.designLanguageReady ? '`design/ui.md`와 `design/ux.md`에 정해져 있다. 디자인 언어에 대해서는 묻지 않는다.' : ''),

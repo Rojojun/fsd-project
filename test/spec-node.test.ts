@@ -165,3 +165,15 @@ test('디자인에 대한 지적은 스펙 작성자에게 넘기지 않는다',
   assert.ok(!tasks[0].prompt.includes('여백이 좁다'));
   assert.ok(tasks[0].prompt.includes('빈 목록 조건이 없음'));
 });
+
+test('근거 정책이 없으면 그렇다고 프롬프트에 밝혀, 본문에 나온 정책 번호를 policies에 넣지 않게 한다', async () => {
+  const { agent, tasks } = fakeAgent({ output: { status: 'question', questions: ['Q'], spec: null } });
+  await tickSpec({ ...setup([doc('A', { body: '고지(POL-014)를 붙인다' })], [register('A', 'req-h', at)]), agent });
+  assert.match(tasks[0].prompt, /근거 정책[\s\S]*없다[\s\S]*policies[\s\S]*빈 배열/);
+});
+
+test('근거 정책이 있으면 그 ID 목록만 policies에 쓰라고 밝힌다', async () => {
+  const { agent, tasks } = fakeAgent({ output: { status: 'question', questions: ['Q'], spec: null } });
+  await tickSpec({ ...setup([doc('A', { policies: ['newest-first'] })], [register('A', 'req-h', at)], { 'newest-first': '최신순' }), agent });
+  assert.match(tasks[0].prompt, /policies.*newest-first/);
+});

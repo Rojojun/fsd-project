@@ -9,9 +9,15 @@ export type ParseResult = { ok: true; doc: RequirementDoc } | { ok: false; error
 
 export const fingerprint = (text: string) => createHash('sha256').update(text).digest('hex');
 
-/** 선행 관계는 작업 순서에만 쓰이므로 내용 지문에서 뺀다. */
+/**
+ * 마크다운 이스케이프 표기를 지운 본문. Linear가 같은 글을 `\[1\]`로도 `\\[1\\]`로도 내보내므로,
+ * 표기만 다른 두 본문이 같은 내용으로 보이게 한다. 백슬래시가 없는 본문은 그대로다.
+ */
+export const unescapeMarkdown = (body: string) => body.replace(/\\+([\\`*_{}[\]()#+\-.!|>~])/g, '$1');
+
+/** 선행 관계는 작업 순서에만 쓰이므로 내용 지문에서 뺀다. 이스케이프 표기 차이도 내용 변경으로 보지 않는다. */
 const contentFingerprint = ({ depends: _depends, ...rest }: Record<string, unknown>, body: string) =>
-  fingerprint(JSON.stringify({ front: rest, body }));
+  fingerprint(JSON.stringify({ front: rest, body: unescapeMarkdown(body) }));
 
 const FRONT_MATTER = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/;
 const isStringList = (v: unknown): v is string[] => Array.isArray(v) && v.every(x => typeof x === 'string');

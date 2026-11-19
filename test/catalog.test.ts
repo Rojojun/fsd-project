@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { parseRequirement } from '../src/catalog.ts';
 
 const file = (front: string, body = '액션 아이템 목록을 생성일 기준으로 정렬한다.\n') => `---\n${front}\n---\n${body}`;
@@ -73,4 +74,27 @@ test('내용 지문은 선행 관계(depends)만 바뀌면 같고, 내용이 바
   assert.equal(a.doc.contentHash, b.doc.contentHash, '내용 지문은 같다');
   assert.notEqual(a.doc.contentHash, c.doc.contentHash);
   assert.notEqual(a.doc.contentHash, d.doc.contentHash);
+});
+
+test('내용 지문은 마크다운 이스케이프 표기만 다르면 같고, 글자가 바뀌면 달라진다', () => {
+  const front = 'id: A-1\ntitle: 제목\npriority: P1';
+  const single = file(front, '인용 번호(\\[1\\], \\[C1\\])를 지운다. 1\\. 첫째\n');
+  const doubled = file(front, '인용 번호(\\\\[1\\\\], \\\\[C1\\\\])를 지운다. 1\\\\. 첫째\n');
+  const plain = file(front, '인용 번호([1], [C1])를 지운다. 1. 첫째\n');
+  const changed = file(front, '인용 번호(\\[2\\], \\[C1\\])를 지운다. 1\\. 첫째\n');
+  const [s, d, p, c] = [single, doubled, plain, changed].map(t => parseRequirement('A-1.md', t));
+  assert.ok(s.ok && d.ok && p.ok && c.ok);
+  assert.notEqual(s.doc.hash, d.doc.hash, '파일 지문은 다르다');
+  assert.equal(s.doc.contentHash, d.doc.contentHash, '\\[ 와 \\\\[ 는 같은 내용');
+  assert.equal(s.doc.contentHash, p.doc.contentHash, '이스케이프 없는 표기와도 같은 내용');
+  assert.notEqual(s.doc.contentHash, c.doc.contentHash, '글자가 바뀌면 다르다');
+});
+
+test('백슬래시가 없는 본문은 내용 지문 계산이 예전과 같다', () => {
+  const r = parseRequirement('A-1.md', file('id: A-1\ntitle: 제목\npriority: P1'));
+  assert.ok(r.ok);
+  const expected = createHash('sha256')
+    .update(JSON.stringify({ front: { id: 'A-1', title: '제목', priority: 'P1' }, body: r.doc.body }))
+    .digest('hex');
+  assert.equal(r.doc.contentHash, expected);
 });

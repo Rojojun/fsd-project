@@ -115,3 +115,36 @@ test('디자인 항목이 생기기 전에 저장된 스펙도 읽어서 보여 
   const { design: _omitted, ...old } = spec;
   assert.doesNotThrow(() => renderSpec(old as typeof spec));
 });
+
+// ── 하위 폴더가 있는 폴더의 지문 ──
+
+test('dirHash는 하위 폴더 안의 파일까지 읽고, 폴더를 파일로 읽다가 실패하지 않는다', async () => {
+  const { dirHash } = await import('../src/spec.ts');
+  const { mkdirSync } = await import('node:fs');
+  const dir = mkdtempSync(join(tmpdir(), 'fsd-dirhash-'));
+  writeFileSync(join(dir, 'a.ts'), 'a');
+  mkdirSync(join(dir, 'harness', 'mutants'), { recursive: true });
+  writeFileSync(join(dir, 'harness', 'mutants', 'm.ts'), 'm1');
+  const first = dirHash(dir);
+  assert.ok(first);
+  writeFileSync(join(dir, 'harness', 'mutants', 'm.ts'), 'm2');
+  assert.notEqual(dirHash(dir), first, '하위 폴더 파일이 바뀌면 지문도 바뀐다');
+});
+
+test('하위 폴더가 없는 폴더의 지문은 예전 계산과 같다 (이미 승인된 지문이 그대로 유효)', async () => {
+  const { dirHash } = await import('../src/spec.ts');
+  const { createHash } = await import('node:crypto');
+  const dir = mkdtempSync(join(tmpdir(), 'fsd-dirhash-flat-'));
+  writeFileSync(join(dir, 'b.json'), '{"x":1}');
+  writeFileSync(join(dir, 'a.md'), '본문');
+  const legacy = createHash('sha256').update(['a.md\0본문', 'b.json\0{"x":1}'].join('\0')).digest('hex');
+  assert.equal(dirHash(dir), legacy);
+});
+
+test('하위 폴더만 있고 파일이 없으면 빈 폴더처럼 null이다', async () => {
+  const { dirHash } = await import('../src/spec.ts');
+  const { mkdirSync } = await import('node:fs');
+  const dir = mkdtempSync(join(tmpdir(), 'fsd-dirhash-empty-'));
+  mkdirSync(join(dir, 'only-dir'));
+  assert.equal(dirHash(dir), null);
+});

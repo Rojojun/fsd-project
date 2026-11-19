@@ -114,10 +114,21 @@ export const readSpec = (root: string, id: string): SavedSpec | null => {
 /** 스펙 폴더 전체의 지문. 승인과 Spec Gate가 이 값에 묶인다. 폴더 안의 무엇이 바뀌어도 달라진다. */
 export const specHash = (root: string, id: string): string | null => dirHash(specDir(root, id));
 
-/** 폴더 안 모든 파일의 이름과 내용으로 만든 지문. 폴더가 없거나 비었으면 null. */
+/** 폴더 안 모든 파일(하위 폴더 포함)의 상대 경로. 임시 파일은 뺀다. */
+const filesUnder = (dir: string, prefix = ''): string[] =>
+  readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) return filesUnder(join(dir, entry.name), rel);
+    return entry.isFile() && !entry.name.endsWith('.tmp') ? [rel] : [];
+  });
+
+/**
+ * 폴더 안 모든 파일의 상대 경로와 내용으로 만든 지문. 폴더가 없거나 파일이 없으면 null.
+ * 하위 폴더가 없으면 상대 경로가 곧 파일 이름이라 예전 계산과 같은 값이 나온다.
+ */
 export const dirHash = (dir: string): string | null => {
   if (!existsSync(dir)) return null;
-  const files = readdirSync(dir).filter(f => !f.endsWith('.tmp')).sort();
+  const files = filesUnder(dir).sort();
   if (files.length === 0) return null;
   return fingerprint(files.map(f => `${f}\0${readFileSync(join(dir, f), 'utf8')}`).join('\0'));
 };

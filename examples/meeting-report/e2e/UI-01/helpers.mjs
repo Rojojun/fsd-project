@@ -94,6 +94,6 @@ export const TEXT = {
   empty: '액션 아이템이 없습니다.',
   loadError: '액션 아이템을 불러오지 못했습니다.',
   retry: '다시 시도',
-  completeError: '완료 처리에 실패했습니다.',
+  completeError: '완료 처리에 실패했습니다. 완료 버튼을 눌러 다시 시도해 주세요.',
   processing: '처리 중',
 };

@@ -61,11 +61,25 @@ export const tickVerify = async (input: VerifyTickInput): Promise<TickResult> =>
   const doc = docs.find(d => d.id === pick.id)!;
   const state = states.find(s => s.id === pick.id)!;
   const command = input.command.replaceAll('{id}', doc.id);
-  const basis = { specHash: specHash(root, doc.id), designHash: state.approvedDesignHash !== null ? designHash(root, doc.id) : null };
+  const basis = { specHash: state.approvedSpecHash, designHash: state.approvedDesignHash };
+  let run: AgentResult | undefined;
+
+  const approvalMismatch = (): string | null => {
+    if (basis.specHash === null || specHash(root, doc.id) !== basis.specHash) return '스펙';
+    if ((state.designRequired || basis.designHash !== null) &&
+      (basis.designHash === null || designHash(root, doc.id) !== basis.designHash)) return '디자인';
+    return null;
+  };
+  const askAboutApproval = (artifact: string): TickResult => {
+    const question = `현재 ${artifact}이(가) 승인본과 일치하지 않습니다. 승인본을 복원하거나 fsd respec ${doc.id} "<사유>"로 다시 검토해 주세요. 복원했다면 fsd answer ${doc.id} "<복원 내용>"으로 재개할 수 있습니다.`;
+    return { id: doc.id, run, outcome: 'question', message: question, state: apply(state, 'ask', 'verify', { question }, at) };
+  };
+
+  const beforeQa = approvalMismatch();
+  if (beforeQa) return askAboutApproval(beforeQa);
 
   const meta = readQaMeta(root, doc.id);
   const fresh = meta !== null && meta.specHash === basis.specHash && meta.designHash === basis.designHash;
-  let run: AgentResult | undefined;
 
   if (fresh && e2eHash(root, doc.id) !== meta.e2eHash) {
     // QA가 쓴 뒤 누군가 테스트를 고쳤다. 고친 테스트로 통과시키지 않는다.
@@ -82,6 +96,8 @@ export const tickVerify = async (input: VerifyTickInput): Promise<TickResult> =>
       ...settings,
     });
     if (!run.ok) return { id: doc.id, run, outcome: 'agent-failed', message: `QA 에이전트 실패(${run.reason}): ${run.detail}` };
+    const afterQa = approvalMismatch();
+    if (afterQa) return askAboutApproval(afterQa);
 
     const design = state.approvedDesignHash !== null ? readDesign(root, doc.id) : null;
     const checked = checkQaPlan(run.output, { spec: readSpec(root, doc.id)!, design, root, command });
@@ -97,6 +113,8 @@ export const tickVerify = async (input: VerifyTickInput): Promise<TickResult> =>
   }
 
   const test = await exec('sh', ['-c', command], { cwd: root, timeoutMs: input.commandTimeoutMs });
+  const afterTest = approvalMismatch();
+  if (afterTest) return askAboutApproval(afterTest);
   if (test.code === 0 && !test.timedOut) {
     return { id: doc.id, run, outcome: 'verified', message: `E2E 통과: ${command}`, state: apply(state, 'passVerify', 'verify', {}, at) };
   }

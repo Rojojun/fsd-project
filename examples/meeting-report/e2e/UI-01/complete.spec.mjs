@@ -202,4 +202,34 @@ test.describe('UI-01 완료 처리 실패', () => {
       await expect(error).toHaveCount(0);
     });
   });
+
+  test('S-39 [UX, AC-16, AC-17] 완료 실패 후 같은 버튼으로 초점을 복구해 키보드로 재시도한다', async ({ page }) => {
+    await withServer([A1], async (baseURL) => {
+      const requests = trackRequests(page);
+      let attempts = 0;
+      await page.route('**/tasks/a1/complete', (route) => {
+        attempts += 1;
+        return attempts === 1 ? fail500(route) : route.continue();
+      });
+
+      await page.goto(`${baseURL}/`);
+      const button = completeButton(page, '회의록 공유');
+      await expect(button).toBeVisible();
+      await page.keyboard.press('Tab');
+      await expect(button).toBeFocused();
+      await page.keyboard.press('Enter');
+
+      const error = row(page, '회의록 공유').getByText(TEXT.completeError, { exact: true });
+      await expect(error).toBeVisible();
+      await expect(button).toBeFocused();
+      await expect(button).toBeEnabled();
+      await expect(page.locator('[aria-live="polite"]')).toHaveText(`회의록 공유: ${TEXT.completeError}`);
+      expect(requests.count('POST', '/tasks/a1/complete')).toBe(1);
+
+      await page.keyboard.press('Enter');
+      await expectDone(page, '회의록 공유');
+      await expect(error).toHaveCount(0);
+      expect(requests.count('POST', '/tasks/a1/complete')).toBe(2);
+    });
+  });
 });

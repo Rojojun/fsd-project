@@ -326,7 +326,8 @@
     return after[0] ?? list;
   };
 
-  const rowError = () => el('p', { className: 'row-error', textContent: '완료 처리에 실패했습니다.' });
+  const completeError = '완료 처리에 실패했습니다. 완료 버튼을 눌러 다시 시도해 주세요.';
+  const rowError = () => el('p', { className: 'row-error', textContent: completeError });
 
   const completeTask = async (task, button) => {
     if (button.disabled) return;
@@ -347,6 +348,7 @@
       button.textContent = '완료';
       item.append(rowError());
       if (shouldRestoreFocus) button.focus();
+      announce(`${task.title}: ${completeError}`);
     }
   };
 

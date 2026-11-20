@@ -103,7 +103,7 @@ npm start                     # http://localhost:3000 에서 화면 확인
   고른 범위에서 **시작 전이거나 진행 중인 이슈만** 가져온다(백로그는 가져오지 않는다).
 - 가져오지 않는다고 하면 `requirements/<ID>.md`를 직접 쓴다.
 
-**③ `fsd.config.json`에 E2E 실행 명령을 적는다.** `{id}`는 요구사항 ID로 바뀐다. 종료 코드 0이면 통과다.
+**③ `fsd.config.json`에 E2E 실행 명령을 적는다.** `{id}`는 요구사항 ID로 바뀐다. 종료 코드 0이면 통과다. 승인된 스펙이나 디자인이 달라지면 `verify`가 사람에게 확인을 요청한다.
 
 ```json
 { "verify": { "command": "npx playwright test e2e/{id}/" } }
@@ -239,3 +239,7 @@ fsd sync                                 요구사항 파일의 변경만 반영
 | `requirements/`, `policies/`, `design/`, `AGENTS.md`, `fsd.config.json` | 사람 (`requirements/`는 `fsd pull`도) |
 | `specs/<ID>/`, `designs/<ID>/`, `e2e/<ID>/` | spec, design, verify 노드 |
 | `.fsd/` | 도구: 상태와 이력, 호출 기록, 인계 메모 |
+
+## 라이선스
+
+[MIT](LICENSE)

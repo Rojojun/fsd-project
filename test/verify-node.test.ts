@@ -4,7 +4,8 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { tickVerify } from '../src/nodes/verify.ts';
-import { readQaPlan } from '../src/qa.ts';
+import { e2eHash, readQaPlan, writeQaMeta } from '../src/qa.ts';
+import { designHash } from '../src/design.ts';
 import { specHash, writeSpec } from '../src/spec.ts';
 import { apply, register } from '../src/transitions.ts';
 import type { Agent, AgentResult, AgentTask, Exec, ExecResult } from '../src/agents/types.ts';
@@ -162,4 +163,44 @@ test('QA가 질문하면 질문 대기가 붙고, 실패하면 상태를 바꾸�
   const r2 = await tickVerify({ ...setup(), agent: failing.agent, exec: fakeExec().exec });
   assert.equal(r2.outcome, 'agent-failed');
   assert.equal(r2.state, undefined);
+});
+
+test('승인된 스펙을 수정하면 QA와 테스트를 호출하기 전에 멈춘다', async () => {
+  const input = setup();
+  writeSpec(input.root, doc, { ...spec, summary: '승인 뒤 수정' });
+  const { agent, tasks } = fakeAgent({ output: plan() }, writesTest);
+  const { exec, calls } = fakeExec();
+  const result = await tickVerify({ ...input, agent, exec });
+
+  assert.equal(result.outcome, 'question');
+  assert.equal(result.state?.status, 'implemented');
+  assert.match(result.message, /스펙.*승인본/);
+  assert.deepEqual([tasks.length, calls.length], [0, 0]);
+});
+
+test('실행 중 승인된 디자인이 바뀌면 성공 종료도 검증 완료가 될 수 없다', async () => {
+  const input = setup();
+  const dir = join(input.root, 'designs', doc.id);
+  mkdirSync(dir, { recursive: true });
+  const html = join(dir, 'index.html');
+  writeFileSync(html, '<html>approved</html>');
+  const approvedDesignHash = designHash(input.root, doc.id);
+  const states = [{ ...input.states[0], designRequired: true, approvedDesignHash }];
+  const e2e = join(input.root, 'e2e', doc.id);
+  mkdirSync(e2e, { recursive: true });
+  writeFileSync(join(e2e, 'api.test.mjs'), '// AC-1');
+  writeQaMeta(input.root, doc.id, {
+    specHash: states[0].approvedSpecHash, designHash: approvedDesignHash, e2eHash: e2eHash(input.root, doc.id),
+  });
+  const { agent, tasks } = fakeAgent({ output: plan() });
+  const exec: Exec = async () => {
+    writeFileSync(html, '<html>changed during verification</html>');
+    return { code: 0, stdout: '', stderr: '', timedOut: false };
+  };
+  const result = await tickVerify({ ...input, states, agent, exec });
+
+  assert.equal(result.outcome, 'question');
+  assert.equal(result.state?.status, 'implemented');
+  assert.match(result.message, /디자인.*승인본/);
+  assert.equal(tasks.length, 0);
 });
